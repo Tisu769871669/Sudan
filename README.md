@@ -76,6 +76,10 @@ bash scripts/apply-openclaw-persona.sh
 - 如果检测到新版 `openclaw.json` 的 `agents.list` 结构，则不强改配置，只部署 workspace 文件，避免写出无效配置。
 - 只有在脚本实际改动配置文件时，才会自动备份并执行 `openclaw config validate`。
 - 最后执行 `openclaw gateway restart`。
+- 如果返回 `Gateway service disabled`，说明人格文件已经部署成功，但后台网关服务还没注册；此时执行：
+  - `openclaw gateway install`
+  - `openclaw gateway restart`
+  - 或者直接前台运行 `openclaw gateway`
 
 ## 回滚命令
 

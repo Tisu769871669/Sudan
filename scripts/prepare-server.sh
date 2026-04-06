@@ -37,6 +37,11 @@ if [[ ! -d "$VENV_DIR" ]]; then
   ensure_venv_support
 fi
 
+if [[ ! -f "$VENV_DIR/bin/activate" ]]; then
+  rm -rf "$VENV_DIR"
+  ensure_venv_support
+fi
+
 source "$VENV_DIR/bin/activate"
 python -m pip install --upgrade pip >/dev/null
 python -m pip install PyYAML >/dev/null

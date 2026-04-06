@@ -254,7 +254,9 @@ PY
 
   echo "Workspace 已同步到: $workspace_path"
   echo "正在重启 OpenClaw 网关..."
-  if ! openclaw gateway restart; then
+  local restart_output
+  if ! restart_output="$(openclaw gateway restart 2>&1)"; then
+    printf '%s\n' "$restart_output"
     echo "网关重启失败。可用以下命令回滚：" >&2
     if [[ -n "$backup_path" && -n "$config_path" ]]; then
       echo "cp '$backup_path' '$config_path' && openclaw config validate && openclaw gateway restart" >&2
@@ -262,6 +264,15 @@ PY
       echo "请检查 workspace 文件和 OpenClaw 日志后重试。" >&2
     fi
     exit 1
+  fi
+  printf '%s\n' "$restart_output"
+
+  if printf '%s\n' "$restart_output" | grep -qi "Gateway service disabled"; then
+    echo "网关服务未启用，当前只完成了人格与知识文件部署。" >&2
+    echo "如果要后台常驻运行，请先执行：openclaw gateway install" >&2
+    echo "安装完成后再执行：openclaw gateway restart" >&2
+    echo "如果只是临时前台启动，可直接执行：openclaw gateway" >&2
+    exit 2
   fi
 
   echo "部署完成。"
