@@ -46,7 +46,7 @@ User=$SERVICE_USER
 WorkingDirectory=$SERVICE_HOME
 Environment=HOME=$SERVICE_HOME
 Environment=PATH=$OPENCLAW_DIR:$SYSTEM_PATH
-ExecStart=$BASH_BIN -lc 'source ~/.profile >/dev/null 2>&1 || true; source ~/.bashrc >/dev/null 2>&1 || true; exec "$OPENCLAW_BIN" gateway run'
+ExecStart=$BASH_BIN "$OPENCLAW_BIN" gateway run
 Restart=on-failure
 RestartSec=5
 
