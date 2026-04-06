@@ -22,6 +22,10 @@ if [[ -z "$BASH_BIN" ]]; then
   exit 1
 fi
 
+OPENCLAW_BIN="$(command -v openclaw)"
+OPENCLAW_DIR="$(dirname "$OPENCLAW_BIN")"
+SYSTEM_PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+
 SERVICE_PATH="/etc/systemd/system/openclaw-gateway.service"
 SERVICE_USER="${SUDO_USER:-root}"
 SERVICE_HOME="$(getent passwd "$SERVICE_USER" | cut -d: -f6)"
@@ -41,7 +45,8 @@ Type=simple
 User=$SERVICE_USER
 WorkingDirectory=$SERVICE_HOME
 Environment=HOME=$SERVICE_HOME
-ExecStart=$BASH_BIN -lc 'exec openclaw gateway run'
+Environment=PATH=$OPENCLAW_DIR:$SYSTEM_PATH
+ExecStart=$BASH_BIN -lc 'source ~/.profile >/dev/null 2>&1 || true; source ~/.bashrc >/dev/null 2>&1 || true; exec "$OPENCLAW_BIN" gateway run'
 Restart=on-failure
 RestartSec=5
 
