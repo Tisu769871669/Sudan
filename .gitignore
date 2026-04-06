@@ -1,0 +1,6 @@
+.venv/
+__pycache__/
+*.pyc
+*.bak.*
+.omx/
+问题.txt
