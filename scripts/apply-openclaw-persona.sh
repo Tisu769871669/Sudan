@@ -269,7 +269,7 @@ PY
 
   if printf '%s\n' "$restart_output" | grep -qi "Gateway service disabled"; then
     echo "检测到 OpenClaw 内置的 gateway service 未启用，尝试安装 systemd 兜底服务..."
-    if [[ "$(id -u)" -eq 0 && -x "$ROOT_DIR/scripts/install-openclaw-service.sh" ]]; then
+    if [[ "$(id -u)" -eq 0 && -f "$ROOT_DIR/scripts/install-openclaw-service.sh" ]]; then
       bash "$ROOT_DIR/scripts/install-openclaw-service.sh"
       echo "部署完成。"
       if [[ -n "$config_path" ]]; then
