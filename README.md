@@ -55,16 +55,27 @@ bash scripts/apply-openclaw-persona.sh
 
 ## 部署脚本行为
 
+- 优先把人格文件部署到 OpenClaw `main` agent 的 workspace。
+- 会写入这些文件：
+  - `SOUL.md`
+  - `IDENTITY.md`
+  - `STYLE.md`
+  - `RULES.md`
+  - `OPENING.md`
+  - `AGENTS.md`
+  - `knowledge/faq.md`
+  - `knowledge/faq.json`
 - 优先尝试 `openclaw config path` 查找配置文件。
+- 优先尝试 `openclaw agents list` 查找 `main` agent 的 workspace。
 - 若命令不可用或未返回有效路径，依次回退检查：
   - `~/.openclaw/openclaw.yaml`
   - `~/.openclaw/config.yaml`
   - `~/.openclaw/openclaw.json`
   - `~/.config/openclaw/config.json`
-- 默认更新 `agents.main.system_prompt`。
-- 如果检测到旧版单 agent 结构，会回退写入 `agent.system_prompt`。
-- 写入前会自动备份原配置。
-- 写入后执行 `openclaw config validate` 和 `openclaw gateway restart`。
+- 如果检测到旧版单 agent 配置结构，会额外更新配置中的 `system_prompt`。
+- 如果检测到新版 `openclaw.json` 的 `agents.list` 结构，则不强改配置，只部署 workspace 文件，避免写出无效配置。
+- 只有在脚本实际改动配置文件时，才会自动备份并执行 `openclaw config validate`。
+- 最后执行 `openclaw gateway restart`。
 
 ## 回滚命令
 

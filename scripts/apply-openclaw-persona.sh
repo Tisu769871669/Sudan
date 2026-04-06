@@ -20,34 +20,44 @@ choose_python() {
   exit 1
 }
 
-detect_config_path() {
-  local reported=""
+run_python() {
+  local py_bin
+  py_bin="$(choose_python)"
+  "$py_bin" "$@"
+}
 
-  if command -v openclaw >/dev/null 2>&1; then
-    reported="$(openclaw config path 2>/dev/null || true)"
-    if [[ -n "$reported" ]]; then
-      reported="$(printf '%s\n' "$reported" | grep -Eo '/[^[:space:]]+\.(yaml|yml|json)' | tail -n 1 || true)"
-      if [[ -n "$reported" && -f "$reported" ]]; then
-        printf '%s\n' "$reported"
-        return
-      fi
-    fi
-  fi
+copy_workspace_files() {
+  local workspace_path="$1"
 
-  for path in \
-    "$HOME/.openclaw/openclaw.yaml" \
-    "$HOME/.openclaw/config.yaml" \
-    "$HOME/.openclaw/openclaw.json" \
-    "$HOME/.config/openclaw/config.json"
-  do
-    if [[ -f "$path" ]]; then
-      printf '%s\n' "$path"
-      return
-    fi
-  done
+  mkdir -p "$workspace_path/knowledge"
+  cp "$ROOT_DIR/persona/IDENTITY.md" "$workspace_path/IDENTITY.md"
+  cp "$ROOT_DIR/persona/STYLE.md" "$workspace_path/STYLE.md"
+  cp "$ROOT_DIR/persona/RULES.md" "$workspace_path/RULES.md"
+  cp "$ROOT_DIR/persona/OPENING.md" "$workspace_path/OPENING.md"
+  cp "$ROOT_DIR/build/generated/system_prompt.md" "$workspace_path/SOUL.md"
+  cp "$ROOT_DIR/knowledge/faq.md" "$workspace_path/knowledge/faq.md"
+  cp "$ROOT_DIR/knowledge/faq.json" "$workspace_path/knowledge/faq.json"
 
-  echo "未找到 OpenClaw 配置文件。" >&2
-  exit 1
+  cat > "$workspace_path/AGENTS.md" <<'EOF'
+# Workspace Rules
+
+启动后优先参考以下文件：
+
+1. `SOUL.md`
+2. `IDENTITY.md`
+3. `STYLE.md`
+4. `RULES.md`
+5. `OPENING.md`
+6. `knowledge/faq.md`
+
+行为要求：
+
+- 你是苏丹的数字分身。
+- 回复要有真人感，先答问题，再自然引导下一步。
+- 知识库不匹配时不要硬答，复杂情况转人工客服。
+- 不要出现“根据资料”“根据上下文”“系统显示”等机械表达。
+- 涉及医疗、疗效、诊断时要克制，不做明确治疗承诺。
+EOF
 }
 
 main() {
@@ -56,99 +66,209 @@ main() {
     exit 1
   fi
 
-  local py_bin
-  py_bin="$(choose_python)"
-
-  "$py_bin" "$ROOT_DIR/build/compose-system-prompt.py"
+  run_python "$ROOT_DIR/build/compose-system-prompt.py"
 
   if [[ ! -f "$GENERATED_PROMPT" ]]; then
     echo "未生成 system_prompt.md。" >&2
     exit 1
   fi
 
-  local config_path
-  config_path="$(detect_config_path)"
-  local backup_path
-  backup_path="${config_path}.bak.$(date +%Y%m%d-%H%M%S)"
-  cp "$config_path" "$backup_path"
+  local metadata_file
+  metadata_file="$(mktemp)"
 
-  OPENCLAW_CONFIG_PATH="$config_path" \
-  GENERATED_PROMPT_PATH="$GENERATED_PROMPT" \
-  "$py_bin" - <<'PY'
+  METADATA_PATH="$metadata_file" run_python - <<'PY'
 from pathlib import Path
 import json
 import os
-import sys
+import subprocess
+
+
+def detect_config_path() -> Path | None:
+    try:
+        result = subprocess.run(
+            ["openclaw", "config", "path"],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+    except FileNotFoundError:
+        result = None
+
+    if result and result.returncode == 0:
+        for line in (result.stdout + "\n" + result.stderr).splitlines():
+            line = line.strip()
+            if line.startswith("/") and Path(line).suffix.lower() in {".yaml", ".yml", ".json"}:
+                path = Path(line).expanduser()
+                if path.exists():
+                    return path
+
+    for raw in [
+        "~/.openclaw/openclaw.yaml",
+        "~/.openclaw/config.yaml",
+        "~/.openclaw/openclaw.json",
+        "~/.config/openclaw/config.json",
+    ]:
+        path = Path(raw).expanduser()
+        if path.exists():
+            return path
+    return None
+
+
+def detect_workspace_from_agents_list() -> Path | None:
+    try:
+        result = subprocess.run(
+            ["openclaw", "agents", "list"],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+    except FileNotFoundError:
+        return None
+
+    if result.returncode != 0:
+        return None
+
+    current_agent = None
+    for line in result.stdout.splitlines():
+        stripped = line.strip()
+        if stripped.startswith("- "):
+            current_agent = stripped[2:].split()[0]
+            continue
+        if current_agent == "main" and stripped.startswith("Workspace:"):
+            return Path(stripped.split(":", 1)[1].strip()).expanduser()
+    return None
+
+
+config_path = detect_config_path()
+workspace_path = detect_workspace_from_agents_list() or Path("~/.openclaw/workspace").expanduser()
+update_strategy = "workspace_only"
+
+if config_path:
+    suffix = config_path.suffix.lower()
+    if suffix in {".yaml", ".yml"}:
+        import yaml
+
+        data = yaml.safe_load(config_path.read_text(encoding="utf-8")) or {}
+        if isinstance(data.get("agent"), dict):
+            workspace_path = Path(data["agent"].get("workspace", workspace_path)).expanduser()
+            update_strategy = "yaml_single_agent"
+        elif isinstance(data.get("agents"), dict) and "list" not in data["agents"] and isinstance(data["agents"].get("main"), dict):
+            workspace_path = Path(data["agents"]["main"].get("workspace", workspace_path)).expanduser()
+            update_strategy = "yaml_agents_mapping"
+    elif suffix == ".json":
+        data = json.loads(config_path.read_text(encoding="utf-8"))
+        if isinstance(data.get("agent"), dict):
+            workspace_path = Path(data["agent"].get("workspace", workspace_path)).expanduser()
+            update_strategy = "json_single_agent"
+        elif isinstance(data.get("agents"), dict):
+            agents = data["agents"]
+            if isinstance(agents.get("main"), dict):
+                workspace_path = Path(agents["main"].get("workspace", workspace_path)).expanduser()
+                update_strategy = "json_agents_mapping"
+            elif isinstance(agents.get("list"), list):
+                for item in agents["list"]:
+                    if isinstance(item, dict) and item.get("id") == "main":
+                        workspace_path = Path(item.get("workspace", workspace_path)).expanduser()
+                        break
+                defaults = agents.get("defaults", {})
+                if isinstance(defaults, dict) and defaults.get("workspace"):
+                    workspace_path = Path(defaults["workspace"]).expanduser()
+                update_strategy = "workspace_only"
+
+metadata = {
+    "config_path": str(config_path) if config_path else "",
+    "workspace_path": str(workspace_path),
+    "update_strategy": update_strategy,
+}
+Path(os.environ["METADATA_PATH"]).write_text(json.dumps(metadata, ensure_ascii=False), encoding="utf-8")
+PY
+
+  local workspace_path
+  workspace_path="$(run_python -c "import json, pathlib; data=json.loads(pathlib.Path('$metadata_file').read_text(encoding='utf-8')); print(data['workspace_path'])")"
+  local config_path
+  config_path="$(run_python -c "import json, pathlib; data=json.loads(pathlib.Path('$metadata_file').read_text(encoding='utf-8')); print(data['config_path'])")"
+  local update_strategy
+  update_strategy="$(run_python -c "import json, pathlib; data=json.loads(pathlib.Path('$metadata_file').read_text(encoding='utf-8')); print(data['update_strategy'])")"
+
+  local backup_path=""
+  if [[ "$update_strategy" != "workspace_only" && -n "$config_path" ]]; then
+    backup_path="${config_path}.bak.$(date +%Y%m%d-%H%M%S)"
+    cp "$config_path" "$backup_path"
+
+    OPENCLAW_CONFIG_PATH="$config_path" \
+    GENERATED_PROMPT_PATH="$GENERATED_PROMPT" \
+    UPDATE_STRATEGY="$update_strategy" \
+    run_python - <<'PY'
+from pathlib import Path
+import json
+import os
 
 config_path = Path(os.environ["OPENCLAW_CONFIG_PATH"])
-prompt_path = Path(os.environ["GENERATED_PROMPT_PATH"])
-prompt_text = prompt_path.read_text(encoding="utf-8").strip()
-suffix = config_path.suffix.lower()
+prompt_text = Path(os.environ["GENERATED_PROMPT_PATH"]).read_text(encoding="utf-8").strip()
+strategy = os.environ["UPDATE_STRATEGY"]
 
-if suffix in {".yaml", ".yml"}:
-    try:
-        import yaml
-    except ModuleNotFoundError as exc:
-        raise SystemExit("当前环境缺少 PyYAML，请先运行 scripts/prepare-server.sh") from exc
+if strategy.startswith("yaml_"):
+    import yaml
 
     data = yaml.safe_load(config_path.read_text(encoding="utf-8")) or {}
-    if not isinstance(data, dict):
-        raise SystemExit("OpenClaw 配置不是对象结构，无法更新。")
-
-    agents = data.get("agents")
-    if isinstance(agents, dict):
-        main_agent = agents.setdefault("main", {})
-        if not isinstance(main_agent, dict):
-            raise SystemExit("agents.main 不是对象结构，无法更新。")
-        main_agent["system_prompt"] = prompt_text
-    elif isinstance(data.get("agent"), dict):
+    if strategy == "yaml_single_agent":
         data["agent"]["system_prompt"] = prompt_text
+    elif strategy == "yaml_agents_mapping":
+        data["agents"]["main"]["system_prompt"] = prompt_text
     else:
-        data.setdefault("agents", {})
-        data["agents"]["main"] = {"system_prompt": prompt_text}
+        raise SystemExit(f"未知 YAML 更新策略: {strategy}")
 
     config_path.write_text(
         yaml.safe_dump(data, allow_unicode=True, sort_keys=False),
         encoding="utf-8",
     )
-elif suffix == ".json":
+elif strategy.startswith("json_"):
     data = json.loads(config_path.read_text(encoding="utf-8"))
-    if not isinstance(data, dict):
-        raise SystemExit("OpenClaw 配置不是对象结构，无法更新。")
-
-    agents = data.get("agents")
-    if isinstance(agents, dict):
-      main_agent = agents.setdefault("main", {})
-      if not isinstance(main_agent, dict):
-          raise SystemExit("agents.main 不是对象结构，无法更新。")
-      main_agent["system_prompt"] = prompt_text
-    elif isinstance(data.get("agent"), dict):
-      data["agent"]["system_prompt"] = prompt_text
+    if strategy == "json_single_agent":
+        data["agent"]["system_prompt"] = prompt_text
+    elif strategy == "json_agents_mapping":
+        data["agents"]["main"]["system_prompt"] = prompt_text
     else:
-      data["agents"] = {"main": {"system_prompt": prompt_text}}
+        raise SystemExit(f"未知 JSON 更新策略: {strategy}")
 
     config_path.write_text(
         json.dumps(data, ensure_ascii=False, indent=2) + "\n",
         encoding="utf-8",
     )
 else:
-    raise SystemExit(f"不支持的配置格式: {config_path}")
+    raise SystemExit(f"不支持的更新策略: {strategy}")
 PY
+  fi
 
-  echo "已备份配置: $backup_path"
-  echo "正在校验 OpenClaw 配置..."
-  openclaw config validate
+  copy_workspace_files "$workspace_path"
+  rm -f "$metadata_file"
 
+  if [[ "$update_strategy" != "workspace_only" && -n "$config_path" ]]; then
+    echo "已更新配置中的 system_prompt。"
+    echo "配置备份: $backup_path"
+    echo "正在校验 OpenClaw 配置..."
+    openclaw config validate
+  else
+    echo "当前配置结构未直接写入 system_prompt，已改为部署到 workspace 文件。"
+  fi
+
+  echo "Workspace 已同步到: $workspace_path"
   echo "正在重启 OpenClaw 网关..."
   if ! openclaw gateway restart; then
     echo "网关重启失败。可用以下命令回滚：" >&2
-    echo "cp '$backup_path' '$config_path' && openclaw config validate && openclaw gateway restart" >&2
+    if [[ -n "$backup_path" && -n "$config_path" ]]; then
+      echo "cp '$backup_path' '$config_path' && openclaw config validate && openclaw gateway restart" >&2
+    else
+      echo "请检查 workspace 文件和 OpenClaw 日志后重试。" >&2
+    fi
     exit 1
   fi
 
   echo "部署完成。"
-  echo "配置文件: $config_path"
-  echo "备份文件: $backup_path"
+  if [[ -n "$config_path" ]]; then
+    echo "配置文件: $config_path"
+  fi
+  echo "Workspace: $workspace_path"
 }
 
 main "$@"
