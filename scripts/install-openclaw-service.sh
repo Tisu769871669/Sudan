@@ -16,15 +16,11 @@ if ! command -v openclaw >/dev/null 2>&1; then
   exit 1
 fi
 
-BASH_BIN="$(command -v bash || true)"
-if [[ -z "$BASH_BIN" ]]; then
-  echo "缺少 bash 命令。" >&2
+SU_BIN="$(command -v su || true)"
+if [[ -z "$SU_BIN" ]]; then
+  echo "缺少 su 命令。" >&2
   exit 1
 fi
-
-OPENCLAW_BIN="$(command -v openclaw)"
-OPENCLAW_DIR="$(dirname "$OPENCLAW_BIN")"
-SYSTEM_PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
 
 SERVICE_PATH="/etc/systemd/system/openclaw-gateway.service"
 SERVICE_USER="${SUDO_USER:-root}"
@@ -45,8 +41,7 @@ Type=simple
 User=$SERVICE_USER
 WorkingDirectory=$SERVICE_HOME
 Environment=HOME=$SERVICE_HOME
-Environment=PATH=$OPENCLAW_DIR:$SYSTEM_PATH
-ExecStart=$BASH_BIN "$OPENCLAW_BIN" gateway run
+ExecStart=$SU_BIN - $SERVICE_USER -c 'openclaw gateway run'
 Restart=on-failure
 RestartSec=5
 
