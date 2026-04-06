@@ -16,7 +16,12 @@ if ! command -v openclaw >/dev/null 2>&1; then
   exit 1
 fi
 
-OPENCLAW_BIN="$(command -v openclaw)"
+BASH_BIN="$(command -v bash || true)"
+if [[ -z "$BASH_BIN" ]]; then
+  echo "缺少 bash 命令。" >&2
+  exit 1
+fi
+
 SERVICE_PATH="/etc/systemd/system/openclaw-gateway.service"
 SERVICE_USER="${SUDO_USER:-root}"
 SERVICE_HOME="$(getent passwd "$SERVICE_USER" | cut -d: -f6)"
@@ -36,7 +41,7 @@ Type=simple
 User=$SERVICE_USER
 WorkingDirectory=$SERVICE_HOME
 Environment=HOME=$SERVICE_HOME
-ExecStart=$OPENCLAW_BIN gateway run
+ExecStart=$BASH_BIN -lc 'exec openclaw gateway run'
 Restart=on-failure
 RestartSec=5
 
@@ -47,5 +52,11 @@ EOF
 systemctl daemon-reload
 systemctl enable --now openclaw-gateway.service
 systemctl status openclaw-gateway.service --no-pager --lines=20 || true
+
+if ! systemctl is-active --quiet openclaw-gateway.service; then
+  echo "openclaw-gateway.service 启动失败，最近日志如下：" >&2
+  journalctl -u openclaw-gateway.service -n 50 --no-pager >&2 || true
+  exit 1
+fi
 
 echo "已安装并启动 systemd 服务: $SERVICE_PATH"
