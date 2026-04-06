@@ -12,6 +12,7 @@
 - `knowledge/faq.json`：结构化 FAQ，可供后续知识库导入。
 - `scripts/prepare-server.sh`：在 Linux 服务器上准备 Python 虚拟环境并安装依赖。
 - `scripts/apply-openclaw-persona.sh`：生成 prompt、定位 OpenClaw 配置、备份、覆盖、校验并重启。
+- `scripts/install-openclaw-service.sh`：当 OpenClaw 自带 `gateway install` 失效时，安装 systemd 兜底服务。
 - `scripts/push-to-github.sh`：本地初始化 Git、提交并推送到 GitHub。
 
 ## 本地生成最终 prompt
@@ -76,10 +77,10 @@ bash scripts/apply-openclaw-persona.sh
 - 如果检测到新版 `openclaw.json` 的 `agents.list` 结构，则不强改配置，只部署 workspace 文件，避免写出无效配置。
 - 只有在脚本实际改动配置文件时，才会自动备份并执行 `openclaw config validate`。
 - 最后执行 `openclaw gateway restart`。
-- 如果返回 `Gateway service disabled`，说明人格文件已经部署成功，但后台网关服务还没注册；此时执行：
-  - `openclaw gateway install`
-  - `openclaw gateway restart`
-  - 或者直接前台运行 `openclaw gateway`
+- 如果返回 `Gateway service disabled`，部署脚本会自动尝试执行 `scripts/install-openclaw-service.sh` 作为 systemd 兜底服务安装。
+- 如果自动安装失败，可以手动执行：
+  - `bash scripts/install-openclaw-service.sh`
+  - `systemctl status openclaw-gateway.service --no-pager`
 
 ## 回滚命令
 

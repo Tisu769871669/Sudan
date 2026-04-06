@@ -268,9 +268,19 @@ PY
   printf '%s\n' "$restart_output"
 
   if printf '%s\n' "$restart_output" | grep -qi "Gateway service disabled"; then
+    echo "检测到 OpenClaw 内置的 gateway service 未启用，尝试安装 systemd 兜底服务..."
+    if [[ "$(id -u)" -eq 0 && -x "$ROOT_DIR/scripts/install-openclaw-service.sh" ]]; then
+      bash "$ROOT_DIR/scripts/install-openclaw-service.sh"
+      echo "部署完成。"
+      if [[ -n "$config_path" ]]; then
+        echo "配置文件: $config_path"
+      fi
+      echo "Workspace: $workspace_path"
+      exit 0
+    fi
+
     echo "网关服务未启用，当前只完成了人格与知识文件部署。" >&2
-    echo "如果要后台常驻运行，请先执行：openclaw gateway install" >&2
-    echo "安装完成后再执行：openclaw gateway restart" >&2
+    echo "请执行：bash scripts/install-openclaw-service.sh" >&2
     echo "如果只是临时前台启动，可直接执行：openclaw gateway" >&2
     exit 2
   fi
