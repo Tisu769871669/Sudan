@@ -1,0 +1,13 @@
+{
+  "name": "sudan-agent-bridge",
+  "version": "1.0.0",
+  "private": true,
+  "description": "HTTP bridge for the Sudan OpenClaw main agent",
+  "scripts": {
+    "start": "node src/server.js",
+    "test": "node --test"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

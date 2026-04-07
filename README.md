@@ -10,9 +10,11 @@
 - `knowledge/faq-source.txt`：原始 FAQ 素材。
 - `knowledge/faq.md`：整理后的 FAQ 文档。
 - `knowledge/faq.json`：结构化 FAQ，可供后续知识库导入。
+- `node-services/agent-bridge/`：把第三方 HTTP `POST` 请求桥接到 OpenClaw `main` agent 的服务。
 - `scripts/prepare-server.sh`：在 Linux 服务器上准备 Python 虚拟环境并安装依赖。
 - `scripts/apply-openclaw-persona.sh`：生成 prompt、定位 OpenClaw 配置、备份、覆盖、校验并重启。
 - `scripts/install-openclaw-service.sh`：当 OpenClaw 自带 `gateway install` 失效时，安装 systemd 兜底服务。
+- `scripts/install-agent-bridge-service.sh`：把 `node-services/agent-bridge` 安装成 systemd 服务。
 - `scripts/push-to-github.sh`：本地初始化 Git、提交并推送到 GitHub。
 
 ## 本地生成最终 prompt
@@ -52,6 +54,77 @@ git clone https://github.com/Tisu769871669/Sudan.git
 cd Sudan
 bash scripts/prepare-server.sh
 bash scripts/apply-openclaw-persona.sh
+```
+
+## HTTP Bridge
+
+桥接服务目录：
+
+```bash
+node-services/agent-bridge
+```
+
+### 准备环境变量
+
+```bash
+cd ~/Sudan/node-services/agent-bridge
+cp .env.example .env
+```
+
+至少修改这些值：
+
+```env
+AGENT_BRIDGE_TOKEN=replace_me
+DEFAULT_AGENT_ID=main
+OPENCLAW_BIN=openclaw
+KNOWLEDGE_FILE=../../knowledge/faq.json
+```
+
+### 前台启动
+
+```bash
+cd ~/Sudan/node-services/agent-bridge
+node src/server.js
+```
+
+### 安装为 systemd 服务
+
+```bash
+cd ~/Sudan
+bash scripts/install-agent-bridge-service.sh
+systemctl status openclaw-agent-bridge.service --no-pager
+```
+
+### 健康检查
+
+```bash
+curl -sS http://127.0.0.1:9070/health
+```
+
+### 本机聊天测试
+
+```bash
+curl -sS -X POST http://127.0.0.1:9070/api/agents/chat \
+  -H "Authorization: Bearer replace_me" \
+  -H "Content-Type: application/json; charset=utf-8" \
+  --data-binary '{
+    "conversationId": "test_001",
+    "content": "黄精适合哪些人群吃？"
+  }'
+```
+
+### 个微推荐请求格式
+
+```json
+{
+  "conversationId": "wechat_user_001",
+  "content": {
+    "messageList": [
+      { "role": "assistant", "text": "您好，我在这边。" },
+      { "role": "user", "text": "介绍一下你能做什么" }
+    ]
+  }
+}
 ```
 
 ## 部署脚本行为

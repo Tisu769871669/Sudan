@@ -4,3 +4,6 @@ __pycache__/
 *.bak.*
 .omx/
 问题.txt
+node-services/agent-bridge/.env
+node-services/agent-bridge/*.log
+node-services/agent-bridge/.data/
