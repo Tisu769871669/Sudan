@@ -16,12 +16,20 @@ if ! command -v node >/dev/null 2>&1; then
   exit 1
 fi
 
+if ! command -v openclaw >/dev/null 2>&1; then
+  echo "缺少 openclaw 命令，请先确认 OpenClaw CLI 已安装。" >&2
+  exit 1
+fi
+
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 SERVICE_DIR="$ROOT_DIR/node-services/agent-bridge"
 ENV_FILE="$SERVICE_DIR/.env"
 SERVICE_USER="$(id -un)"
 SERVICE_HOME="$(getent passwd "$SERVICE_USER" | cut -d: -f6)"
 NODE_BIN="$(command -v node)"
+OPENCLAW_BIN="$(command -v openclaw)"
+OPENCLAW_DIR="$(dirname "$OPENCLAW_BIN")"
+SYSTEM_PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
 SERVICE_PATH="/etc/systemd/system/openclaw-agent-bridge.service"
 
 if [[ ! -f "$ENV_FILE" ]]; then
@@ -41,6 +49,8 @@ Type=simple
 User=$SERVICE_USER
 WorkingDirectory=$SERVICE_DIR
 Environment=HOME=$SERVICE_HOME
+Environment=PATH=$OPENCLAW_DIR:$SYSTEM_PATH
+Environment=OPENCLAW_BIN=$OPENCLAW_BIN
 EnvironmentFile=$ENV_FILE
 ExecStart=$NODE_BIN $SERVICE_DIR/src/server.js
 Restart=on-failure
