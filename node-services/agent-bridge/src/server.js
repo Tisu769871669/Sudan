@@ -176,9 +176,15 @@ function normalizeMessage(item) {
 
 function extractConversation(payload) {
   const conversationId =
-    String(payload.conversationId || payload.sessionId || "").trim();
+    String(
+      payload.conversationId ||
+        payload.conversation_id ||
+        payload.sessionId ||
+        payload.session_id ||
+        ""
+    ).trim();
   if (!conversationId) {
-    throw createHttpError(400, "conversationId is required");
+    throw createHttpError(400, "conversationId or conversation_id is required");
   }
 
   const nestedContent = payload.content;

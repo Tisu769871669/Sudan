@@ -6,7 +6,7 @@
 
 - `POST /api/agents/chat` 默认调用 `main`
 - `POST /api/agents/<agentId>/chat` 显式指定 agent
-- 固定 `conversationId` 映射到稳定 `sessionId`
+- 固定 `conversationId` 或 `conversation_id` 映射到稳定 `sessionId`
 - 支持 `content` 字符串或 `messageList`
 - 读取本地 FAQ JSON，命中后把结果作为隐藏上下文注入给 OpenClaw
 - Bearer Token 鉴权
@@ -65,6 +65,15 @@ Content-Type: application/json
 ```json
 {
   "conversationId": "wechat_user_001",
+  "content": "你是谁"
+}
+```
+
+也兼容下划线写法：
+
+```json
+{
+  "conversation_id": "wechat_user_001",
   "content": "你是谁"
 }
 ```
