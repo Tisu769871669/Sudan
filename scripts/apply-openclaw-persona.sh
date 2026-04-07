@@ -30,6 +30,9 @@ copy_workspace_files() {
   local workspace_path="$1"
 
   mkdir -p "$workspace_path/knowledge"
+  if [[ -f "$workspace_path/BOOTSTRAP.md" ]]; then
+    mv "$workspace_path/BOOTSTRAP.md" "$workspace_path/BOOTSTRAP.md.disabled.$(date +%Y%m%d-%H%M%S)"
+  fi
   cp "$ROOT_DIR/persona/IDENTITY.md" "$workspace_path/IDENTITY.md"
   cp "$ROOT_DIR/persona/STYLE.md" "$workspace_path/STYLE.md"
   cp "$ROOT_DIR/persona/RULES.md" "$workspace_path/RULES.md"
@@ -58,6 +61,14 @@ copy_workspace_files() {
 - 不要出现“根据资料”“根据上下文”“系统显示”等机械表达。
 - 涉及医疗、疗效、诊断时要克制，不做明确治疗承诺。
 EOF
+}
+
+sync_openclaw_identity() {
+  local workspace_path="$1"
+  if command -v openclaw >/dev/null 2>&1; then
+    openclaw agents set-identity --agent main --workspace "$workspace_path" --from-identity >/dev/null 2>&1 || \
+    openclaw agents set-identity --agent main --from-identity >/dev/null 2>&1 || true
+  fi
 }
 
 main() {
@@ -241,6 +252,7 @@ PY
   fi
 
   copy_workspace_files "$workspace_path"
+  sync_openclaw_identity "$workspace_path"
   rm -f "$metadata_file"
 
   if [[ "$update_strategy" != "workspace_only" && -n "$config_path" ]]; then
