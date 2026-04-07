@@ -27,6 +27,7 @@ AGENT_BRIDGE_TOKEN=replace_me
 DEFAULT_AGENT_ID=main
 OPENCLAW_BIN=openclaw
 KNOWLEDGE_FILE=../../knowledge/faq.json
+SYSTEM_PROMPT_FILE=../../build/generated/system_prompt.md
 ```
 
 3. 启动服务：

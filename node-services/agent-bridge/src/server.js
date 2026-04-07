@@ -20,6 +20,9 @@ const config = {
   knowledgeFile: process.env.KNOWLEDGE_FILE
     ? path.resolve(ROOT_DIR, process.env.KNOWLEDGE_FILE)
     : path.resolve(ROOT_DIR, "../../knowledge/faq.json"),
+  systemPromptFile: process.env.SYSTEM_PROMPT_FILE
+    ? path.resolve(ROOT_DIR, process.env.SYSTEM_PROMPT_FILE)
+    : path.resolve(ROOT_DIR, "../../build/generated/system_prompt.md"),
   kbTopK: Number(process.env.KB_TOP_K || 3),
   kbMinScore: Number(process.env.KB_MIN_SCORE || 3),
   maxHistoryMessages: Number(process.env.MAX_HISTORY_MESSAGES || 8),
@@ -29,6 +32,7 @@ const config = {
 config.openclawBin = resolveExecutable(config.openclawBin);
 
 const knowledgeStore = createKnowledgeStore(config.knowledgeFile);
+const systemPromptStore = createTextFileStore(config.systemPromptFile);
 
 function loadDotEnv(filePath) {
   if (!fs.existsSync(filePath)) {
@@ -58,6 +62,26 @@ function log(level, message, extra = undefined) {
   }
   const payload = extra ? ` ${JSON.stringify(extra)}` : "";
   console.log(`[agent-bridge] ${level}: ${message}${payload}`);
+}
+
+function createTextFileStore(filePath) {
+  const absolutePath = path.resolve(filePath);
+  let cachedMtimeMs = 0;
+  let cachedValue = "";
+
+  function read() {
+    const stats = fs.statSync(absolutePath);
+    if (stats.mtimeMs !== cachedMtimeMs) {
+      cachedValue = fs.readFileSync(absolutePath, "utf8").trim();
+      cachedMtimeMs = stats.mtimeMs;
+    }
+    return cachedValue;
+  }
+
+  return {
+    absolutePath,
+    read,
+  };
 }
 
 function resolveExecutable(input) {
@@ -224,11 +248,15 @@ function formatKnowledgeHits(hits) {
     .join("\n\n");
 }
 
-function buildAgentMessage({ userMessage, history, knowledgeHits }) {
+function buildAgentMessage({ systemPrompt, userMessage, history, knowledgeHits }) {
   return [
     "以下是桥接层提供的隐藏上下文，请直接回复用户，不要提到“桥接层”“上下文”“资料来源”这类字眼。",
+    "你必须优先遵守下方“苏丹人格与回复规则”。如果它与当前 agent 的默认身份冲突，以这份规则为准。",
     "如果知识命中不相关，请忽略，不要硬答。",
     "如果知识不足，请自然兜底并引导人工或进一步描述。",
+    "",
+    "【苏丹人格与回复规则】",
+    systemPrompt || "未提供额外人格规则。",
     "",
     "【最近消息】",
     formatHistory(history),
@@ -396,7 +424,9 @@ async function handleChat(req, res, agentId) {
     topK: config.kbTopK,
     minScore: config.kbMinScore,
   });
+  const systemPrompt = systemPromptStore.read();
   const message = buildAgentMessage({
+    systemPrompt,
     userMessage,
     history,
     knowledgeHits,
@@ -444,6 +474,7 @@ const server = http.createServer(async (req, res) => {
         service: "sudan-agent-bridge",
         defaultAgentId: config.defaultAgentId,
         knowledgeFile: knowledgeStore.absolutePath,
+        systemPromptFile: systemPromptStore.absolutePath,
         openclawBin: config.openclawBin,
       });
       return;
