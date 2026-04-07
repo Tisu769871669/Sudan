@@ -95,6 +95,49 @@ bash scripts/install-agent-bridge-service.sh
 systemctl status openclaw-agent-bridge.service --no-pager
 ```
 
+## Nginx HTTPS
+
+如果要用 `sdseoul.metast.cn` 走 HTTPS，并把 443 反代到 bridge 的 9070，可直接执行：
+
+```bash
+cd ~/Sudan
+bash scripts/install-nginx-https.sh
+```
+
+默认参数：
+
+```env
+DOMAIN=sdseoul.metast.cn
+BRIDGE_PORT=9070
+CERT_URL=https://getssl.vx.link/66a9a94fbae44.crt
+KEY_URL=https://getssl.vx.link/66a9a94fbae44.key
+```
+
+执行后会：
+
+- 安装 nginx
+- 下载证书和私钥到 `/etc/nginx/ssl/`
+- 写入站点配置
+- 让 `443 -> 127.0.0.1:9070`
+- 自动执行 `nginx -t` 和 `systemctl restart nginx`
+
+站点配置模板在 `deploy/nginx/sdseoul.metast.cn.conf`
+
+### 证书自动更新
+
+仓库里附带了微林证书更新脚本：
+
+```bash
+cd ~/Sudan
+bash scripts/update-vxssl.sh
+```
+
+可按微林文档加到 crontab，例如每天凌晨执行：
+
+```bash
+(crontab -l 2>/dev/null; echo "0 0 * * * /root/Sudan/scripts/update-vxssl.sh >> /var/log/update-vxssl.log 2>&1") | crontab -
+```
+
 ### 健康检查
 
 ```bash
