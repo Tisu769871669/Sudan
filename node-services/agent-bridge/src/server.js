@@ -118,7 +118,7 @@ function readJsonBody(req) {
     req.on("data", (chunk) => {
       raw += chunk;
       if (raw.length > 1024 * 1024) {
-        reject(createHttpError(413, "Request body too large"));
+        reject(createApiError(413, "invalid_request", "Request body too large"));
         req.destroy();
       }
     });
@@ -130,7 +130,7 @@ function readJsonBody(req) {
       try {
         resolve(JSON.parse(raw));
       } catch {
-        reject(createHttpError(400, "Invalid JSON body"));
+        reject(createApiError(400, "invalid_request", "Invalid JSON body"));
       }
     });
     req.on("error", (error) => reject(error));
@@ -140,6 +140,12 @@ function readJsonBody(req) {
 function createHttpError(statusCode, message) {
   const error = new Error(message);
   error.statusCode = statusCode;
+  return error;
+}
+
+function createApiError(statusCode, errorCode, message) {
+  const error = createHttpError(statusCode, message);
+  error.errorCode = errorCode;
   return error;
 }
 
@@ -184,8 +190,10 @@ function extractConversation(payload) {
         ""
     ).trim();
   if (!conversationId) {
-    throw createHttpError(400, "conversationId or conversation_id is required");
+    throw createApiError(400, "invalid_request", "conversationId is required");
   }
+
+  const userId = String(payload.userId || payload.user_id || "").trim();
 
   const nestedContent = payload.content;
   const topLevelMessageList = Array.isArray(payload.messageList)
@@ -210,11 +218,12 @@ function extractConversation(payload) {
   }
 
   if (!userMessage) {
-    throw createHttpError(400, "message or content is required");
+    throw createApiError(400, "invalid_request", "message or content is required");
   }
 
   return {
     conversationId,
+    userId,
     history,
     userMessage,
   };
@@ -223,9 +232,8 @@ function extractConversation(payload) {
 function buildSessionId(agentId, conversationId) {
   const trimmed = String(conversationId).trim();
   const sanitized = trimmed.replace(/[^a-zA-Z0-9:_-]/g, "_");
-  const base = sanitized.slice(0, 80);
-  const hash = crypto.createHash("sha1").update(trimmed).digest("hex").slice(0, 10);
-  return `bridge:${agentId}:${base || "session"}:${hash}`;
+  const base = sanitized.slice(0, 120) || "session";
+  return `bridge_${agentId}_${base}`;
 }
 
 function formatHistory(history) {
@@ -421,12 +429,21 @@ function matchRoute(req) {
 
 async function handleChat(req, res, agentId) {
   if (!authenticate(req)) {
-    sendJson(res, 401, { error: "Unauthorized" });
+    sendJson(
+      res,
+      401,
+      createErrorPayload({
+        errorCode: "unauthorized",
+        message: "Unauthorized",
+        traceId: crypto.randomUUID(),
+      })
+    );
     return;
   }
 
   const payload = await readJsonBody(req);
-  const { conversationId, history, userMessage } = extractConversation(payload);
+  const traceId = crypto.randomUUID();
+  const { conversationId, userId, history, userMessage } = extractConversation(payload);
   const sessionId = buildSessionId(agentId, conversationId);
   const knowledgeHits = knowledgeStore.search(userMessage, {
     topK: config.kbTopK,
@@ -443,7 +460,9 @@ async function handleChat(req, res, agentId) {
   log("info", "handling chat request", {
     agentId,
     conversationId,
+    userId,
     sessionId,
+    traceId,
     knowledgeHits: knowledgeHits.length,
   });
 
@@ -453,26 +472,54 @@ async function handleChat(req, res, agentId) {
     message,
   });
 
-  sendJson(res, 200, {
-    agentId,
-    conversationId,
-    sessionId,
-    reply: result.reply,
-    mediaUrls: result.mediaUrls,
-    knowledgeHits: knowledgeHits.map((item) => ({
-      id: item.id,
-      question: item.question,
-      score: item.score,
-      category: item.category,
-    })),
-  });
+  sendJson(
+    res,
+    200,
+    createSuccessPayload({
+      agentId,
+      conversationId,
+      userId,
+      reply: result.reply,
+      sessionId,
+      traceId,
+    })
+  );
+}
+
+function createSuccessPayload({ agentId, conversationId, userId, reply, sessionId, traceId }) {
+  return {
+    ok: true,
+    agent_id: agentId,
+    conversation_id: conversationId,
+    user_id: userId,
+    reply,
+    session_id: sessionId,
+    trace_id: traceId,
+  };
+}
+
+function createErrorPayload({ errorCode, message, traceId }) {
+  return {
+    ok: false,
+    error: errorCode,
+    message,
+    trace_id: traceId,
+  };
 }
 
 const server = http.createServer(async (req, res) => {
   try {
     const route = matchRoute(req);
     if (!route) {
-      sendJson(res, 404, { error: "Not found" });
+      sendJson(
+        res,
+        404,
+        createErrorPayload({
+          errorCode: "not_found",
+          message: "Not found",
+          traceId: crypto.randomUUID(),
+        })
+      );
       return;
     }
 
@@ -491,20 +538,45 @@ const server = http.createServer(async (req, res) => {
     await handleChat(req, res, route.agentId);
   } catch (error) {
     const statusCode = error.statusCode || 500;
+    const traceId = crypto.randomUUID();
     log("error", "request failed", {
+      traceId,
       message: error.message,
+      errorCode: error.errorCode || "internal_error",
       statusCode,
     });
-    sendJson(res, statusCode, {
-      error: error.message || "Internal server error",
-    });
+    sendJson(
+      res,
+      statusCode,
+      createErrorPayload({
+        errorCode:
+          error.errorCode || (statusCode === 502 ? "agent_execution_failed" : "internal_error"),
+        message: error.message || "Internal server error",
+        traceId,
+      })
+    );
   }
 });
 
-server.listen(config.port, () => {
-  log("info", "agent bridge listening", {
-    port: config.port,
-    defaultAgentId: config.defaultAgentId,
-    knowledgeFile: knowledgeStore.absolutePath,
+function startServer() {
+  server.listen(config.port, () => {
+    log("info", "agent bridge listening", {
+      port: config.port,
+      defaultAgentId: config.defaultAgentId,
+      knowledgeFile: knowledgeStore.absolutePath,
+    });
   });
-});
+  return server;
+}
+
+if (require.main === module) {
+  startServer();
+}
+
+module.exports = {
+  buildSessionId,
+  createErrorPayload,
+  createSuccessPayload,
+  extractConversation,
+  startServer,
+};
