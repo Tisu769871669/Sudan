@@ -260,18 +260,37 @@ function runOpenClawAgent({ agentId, sessionId, message }) {
       args.push("--local");
     }
 
-    const useShell = process.platform === "win32" && config.openclawBin.toLowerCase().endsWith(".cmd");
-    const child = spawn(config.openclawBin, args, {
-      cwd: ROOT_DIR,
-      env: {
-        ...process.env,
-        OPENCLAW_HIDE_BANNER: "1",
-        OPENCLAW_SUPPRESS_NOTES: "1",
-        NO_COLOR: "1",
-      },
-      shell: useShell,
-      windowsHide: true,
-    });
+    const env = {
+      ...process.env,
+      OPENCLAW_HIDE_BANNER: "1",
+      OPENCLAW_SUPPRESS_NOTES: "1",
+      NO_COLOR: "1",
+    };
+
+    const child =
+      process.platform === "win32"
+        ? spawn(config.openclawBin, args, {
+            cwd: ROOT_DIR,
+            env,
+            shell: config.openclawBin.toLowerCase().endsWith(".cmd"),
+            windowsHide: true,
+          })
+        : spawn(
+            "bash",
+            [
+              "-lc",
+              [
+                "source ~/.profile >/dev/null 2>&1 || true",
+                "source ~/.bashrc >/dev/null 2>&1 || true",
+                "exec " + shellJoin([config.openclawBin, ...args]),
+              ].join("; "),
+            ],
+            {
+              cwd: ROOT_DIR,
+              env,
+              windowsHide: true,
+            }
+          );
 
     let stdout = "";
     let stderr = "";
@@ -295,6 +314,18 @@ function runOpenClawAgent({ agentId, sessionId, message }) {
       resolve(parseAgentOutput(stdout, stderr));
     });
   });
+}
+
+function shellJoin(parts) {
+  return parts.map(shellEscape).join(" ");
+}
+
+function shellEscape(value) {
+  const input = String(value ?? "");
+  if (!input) {
+    return "''";
+  }
+  return `'${input.replace(/'/g, `'\"'\"'`)}'`;
 }
 
 function parseAgentOutput(stdout, stderr) {
