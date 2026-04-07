@@ -253,7 +253,6 @@ function runOpenClawAgent({ agentId, sessionId, message }) {
       message,
       "--timeout",
       String(config.timeoutSeconds),
-      "--no-color",
     ];
 
     if (config.forceLocal) {
