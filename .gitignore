@@ -7,3 +7,6 @@ __pycache__/
 node-services/agent-bridge/.env
 node-services/agent-bridge/*.log
 node-services/agent-bridge/.data/
+external/
+tmp/
+mem/

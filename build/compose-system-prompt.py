@@ -3,6 +3,7 @@ from pathlib import Path
 
 SECTIONS = [
     "IDENTITY.md",
+    "DISTILLED_SERVICE.md",
     "STYLE.md",
     "RULES.md",
     "OPENING.md",
