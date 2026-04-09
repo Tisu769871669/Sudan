@@ -29,6 +29,7 @@ const config = {
   kbTopK: Number(process.env.KB_TOP_K || 3),
   kbMinScore: Number(process.env.KB_MIN_SCORE || 3),
   maxHistoryMessages: Number(process.env.MAX_HISTORY_MESSAGES || 8),
+  aggregationWindowMs: Number(process.env.AGGREGATION_WINDOW_MS || 2500),
   logLevel: process.env.LOG_LEVEL || "info",
 };
 
@@ -39,6 +40,7 @@ const colleagueSkillStore = config.colleagueSkillFile
   ? createOptionalTextFileStore(config.colleagueSkillFile)
   : null;
 const systemPromptStore = createTextFileStore(config.systemPromptFile);
+const pendingAggregations = new Map();
 
 function loadDotEnv(filePath) {
   if (!fs.existsSync(filePath)) {
@@ -473,6 +475,177 @@ function parseAgentOutput(stdout, stderr) {
   };
 }
 
+function mergeUserMessages(messages) {
+  const result = [];
+  for (const value of messages.map((item) => String(item || "").trim()).filter(Boolean)) {
+    if (result[result.length - 1] !== value) {
+      result.push(value);
+    }
+  }
+  return result.join("\n");
+}
+
+function mergeHistories(requests, maxMessages) {
+  const merged = [];
+  for (const request of requests) {
+    for (const item of request.history || []) {
+      if (!item || !item.text) {
+        continue;
+      }
+      const prev = merged[merged.length - 1];
+      if (!prev || prev.role !== item.role || prev.text !== item.text) {
+        merged.push(item);
+      }
+    }
+  }
+  return merged.slice(-maxMessages);
+}
+
+function createAggregationResponse(waiter, reply, sessionId) {
+  return createSuccessPayload({
+    agentId: waiter.agentId,
+    conversationId: waiter.conversationId,
+    userId: waiter.userId,
+    reply,
+    sessionId,
+    traceId: waiter.traceId,
+  });
+}
+
+function createAggregationError(waiter, errorCode, message) {
+  return createErrorPayload({
+    errorCode,
+    message,
+    traceId: waiter.traceId,
+  });
+}
+
+function queueAggregatedChat(request) {
+  const aggregationKey = `${request.agentId}::${request.conversationId}`;
+
+  return new Promise((resolve) => {
+    const waiter = { ...request, resolve };
+    let entry = pendingAggregations.get(aggregationKey);
+
+    if (!entry) {
+      entry = {
+        key: aggregationKey,
+        requests: [],
+        timer: null,
+      };
+      pendingAggregations.set(aggregationKey, entry);
+    }
+
+    entry.requests.push(waiter);
+
+    if (entry.timer) {
+      clearTimeout(entry.timer);
+    }
+
+    log("info", "request buffered", {
+      conversationId: request.conversationId,
+      traceId: request.traceId,
+      aggregationKey,
+      queuedCount: entry.requests.length,
+      messageSource: request.messageSource,
+      userMessagePreview: previewText(request.userMessage),
+      userMessageHash: hashText(request.userMessage),
+    });
+
+    entry.timer = setTimeout(() => {
+      flushAggregation(entry).catch((error) => {
+        log("error", "aggregation flush failed", {
+          conversationId: request.conversationId,
+          message: error.message,
+        });
+      });
+    }, Math.max(0, config.aggregationWindowMs));
+  });
+}
+
+async function flushAggregation(entry) {
+  pendingAggregations.delete(entry.key);
+  if (entry.timer) {
+    clearTimeout(entry.timer);
+  }
+
+  const requests = entry.requests;
+  const primary = requests[requests.length - 1];
+  const sessionId = buildSessionId(primary.agentId, primary.conversationId);
+  const mergedUserMessage = mergeUserMessages(requests.map((item) => item.userMessage));
+  const mergedHistory = mergeHistories(requests, config.maxHistoryMessages);
+  const knowledgeHits = knowledgeStore.search(mergedUserMessage, {
+    topK: config.kbTopK,
+    minScore: config.kbMinScore,
+  });
+  const stylePrompt =
+    (colleagueSkillStore && colleagueSkillStore.read()) || systemPromptStore.read();
+  const message = buildAgentMessage({
+    stylePrompt,
+    userMessage: mergedUserMessage,
+    history: mergedHistory,
+    knowledgeHits,
+  });
+
+  log("info", "aggregation flushed", {
+    conversationId: primary.conversationId,
+    sessionId,
+    traceId: primary.traceId,
+    burstCount: requests.length,
+    mergedUserMessagePreview: previewText(mergedUserMessage),
+    mergedUserMessageHash: hashText(mergedUserMessage),
+    historyCount: mergedHistory.length,
+    knowledgeHits: knowledgeHits.length,
+  });
+
+  try {
+    const result = await runOpenClawAgent({
+      agentId: primary.agentId,
+      sessionId,
+      message,
+    });
+
+    log("info", "reply generated", {
+      agentId: primary.agentId,
+      conversationId: primary.conversationId,
+      sessionId,
+      traceId: primary.traceId,
+      burstCount: requests.length,
+      replyPreview: previewText(result.reply),
+      replyHash: hashText(result.reply),
+    });
+
+    requests.forEach((waiter, index) => {
+      const reply = index === requests.length - 1 ? result.reply : "";
+      waiter.resolve({
+        statusCode: 200,
+        payload: createAggregationResponse(waiter, reply, sessionId),
+      });
+    });
+  } catch (error) {
+    const statusCode = error.statusCode || 500;
+    const errorCode =
+      error.errorCode || (statusCode === 502 ? "agent_execution_failed" : "internal_error");
+    const messageText = error.message || "Internal server error";
+
+    log("error", "request failed", {
+      traceId: primary.traceId,
+      conversationId: primary.conversationId,
+      message: messageText,
+      errorCode,
+      statusCode,
+      burstCount: requests.length,
+    });
+
+    requests.forEach((waiter) => {
+      waiter.resolve({
+        statusCode,
+        payload: createAggregationError(waiter, errorCode, messageText),
+      });
+    });
+  }
+}
+
 function matchRoute(req) {
   const url = new URL(req.url, `http://${req.headers.host || "127.0.0.1"}`);
   if (req.method === "GET" && url.pathname === "/health") {
@@ -510,60 +683,28 @@ async function handleChat(req, res, agentId) {
   const payload = await readJsonBody(req);
   const traceId = crypto.randomUUID();
   const { conversationId, userId, history, messageSource, userMessage } = extractConversation(payload);
-  const sessionId = buildSessionId(agentId, conversationId);
-  const knowledgeHits = knowledgeStore.search(userMessage, {
-    topK: config.kbTopK,
-    minScore: config.kbMinScore,
-  });
-  const stylePrompt =
-    (colleagueSkillStore && colleagueSkillStore.read()) || systemPromptStore.read();
-  const message = buildAgentMessage({
-    stylePrompt,
-    userMessage,
-    history,
-    knowledgeHits,
-  });
-
   log("info", "handling chat request", {
     agentId,
     conversationId,
     userId,
-    sessionId,
     traceId,
     messageSource,
     userMessagePreview: previewText(userMessage),
     userMessageHash: hashText(userMessage),
     historyCount: history.length,
-    knowledgeHits: knowledgeHits.length,
   });
 
-  const result = await runOpenClawAgent({
-    agentId,
-    sessionId,
-    message,
-  });
-
-  log("info", "reply generated", {
+  const aggregated = await queueAggregatedChat({
     agentId,
     conversationId,
-    sessionId,
+    userId,
+    history,
+    messageSource,
+    userMessage,
     traceId,
-    replyPreview: previewText(result.reply),
-    replyHash: hashText(result.reply),
   });
 
-  sendJson(
-    res,
-    200,
-    createSuccessPayload({
-      agentId,
-      conversationId,
-      userId,
-      reply: result.reply,
-      sessionId,
-      traceId,
-    })
-  );
+  sendJson(res, aggregated.statusCode, aggregated.payload);
 }
 
 function createSuccessPayload({ agentId, conversationId, userId, reply, sessionId, traceId }) {
