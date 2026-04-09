@@ -7,6 +7,32 @@
 - `POST /api/agents/chat`
 - `POST /api/agents/<agentId>/chat`
 
+## 风格来源
+
+推荐线上组合方式：
+
+- `bridge` 保留
+- `knowledge/faq.json` 保留
+- `sudan` 同事蒸馏 skill 作为主要人格来源
+
+当前 bridge 支持：
+
+- 优先读取 `COLLEAGUE_SKILL_FILE`
+- 如果该文件不存在，再回退到 `SYSTEM_PROMPT_FILE`
+
+推荐 `.env` 增加：
+
+```env
+COLLEAGUE_SKILL_FILE=~/.openclaw/workspace/skills/colleagues/sudan/SKILL.md
+SYSTEM_PROMPT_FILE=../../build/generated/system_prompt.md
+```
+
+这样可以做到：
+
+- `COLLEAGUE_SKILL_FILE` 负责“怎么说”
+- `KNOWLEDGE_FILE` 负责“说什么不能错”
+- `bridge` 继续负责协议、鉴权、上下文和错误码
+
 ## 请求头
 
 ```http

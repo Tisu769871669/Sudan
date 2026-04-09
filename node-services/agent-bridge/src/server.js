@@ -20,6 +20,9 @@ const config = {
   knowledgeFile: process.env.KNOWLEDGE_FILE
     ? path.resolve(ROOT_DIR, process.env.KNOWLEDGE_FILE)
     : path.resolve(ROOT_DIR, "../../knowledge/faq.json"),
+  colleagueSkillFile: process.env.COLLEAGUE_SKILL_FILE
+    ? resolveHomePath(process.env.COLLEAGUE_SKILL_FILE)
+    : "",
   systemPromptFile: process.env.SYSTEM_PROMPT_FILE
     ? path.resolve(ROOT_DIR, process.env.SYSTEM_PROMPT_FILE)
     : path.resolve(ROOT_DIR, "../../build/generated/system_prompt.md"),
@@ -32,6 +35,9 @@ const config = {
 config.openclawBin = resolveExecutable(config.openclawBin);
 
 const knowledgeStore = createKnowledgeStore(config.knowledgeFile);
+const colleagueSkillStore = config.colleagueSkillFile
+  ? createOptionalTextFileStore(config.colleagueSkillFile)
+  : null;
 const systemPromptStore = createTextFileStore(config.systemPromptFile);
 
 function loadDotEnv(filePath) {
@@ -82,6 +88,39 @@ function createTextFileStore(filePath) {
     absolutePath,
     read,
   };
+}
+
+function createOptionalTextFileStore(filePath) {
+  const absolutePath = path.resolve(filePath);
+  let cachedMtimeMs = 0;
+  let cachedValue = "";
+
+  function read() {
+    if (!fs.existsSync(absolutePath)) {
+      return "";
+    }
+    const stats = fs.statSync(absolutePath);
+    if (stats.mtimeMs !== cachedMtimeMs) {
+      cachedValue = fs.readFileSync(absolutePath, "utf8").trim();
+      cachedMtimeMs = stats.mtimeMs;
+    }
+    return cachedValue;
+  }
+
+  return {
+    absolutePath,
+    read,
+  };
+}
+
+function resolveHomePath(input) {
+  if (!input) {
+    return input;
+  }
+  if (input.startsWith("~/")) {
+    return path.join(process.env.HOME || process.env.USERPROFILE || "", input.slice(2));
+  }
+  return input;
 }
 
 function resolveExecutable(input) {
@@ -262,17 +301,18 @@ function formatKnowledgeHits(hits) {
     .join("\n\n");
 }
 
-function buildAgentMessage({ systemPrompt, userMessage, history, knowledgeHits }) {
+function buildAgentMessage({ stylePrompt, userMessage, history, knowledgeHits }) {
   return [
     "以下是桥接层提供的隐藏上下文，请直接回复用户，不要提到“桥接层”“上下文”“资料来源”这类字眼。",
     "你必须优先遵守下方“苏丹人格与回复规则”。如果它与当前 agent 的默认身份冲突，以这份规则为准。",
+    "优先使用 sudan skill 里的人格、语气、承接方式来回复，但业务事实仍以知识库和规则为准。",
     "回复务必更口语、更短。优先 1 到 3 句话，能短就短。",
     "除非用户明确追问，不要一次讲太多，不要写成长段说明文。",
     "如果知识命中不相关，请忽略，不要硬答。",
     "如果知识不足，请自然兜底并引导人工或进一步描述。",
     "",
     "【苏丹人格与回复规则】",
-    systemPrompt || "未提供额外人格规则。",
+    stylePrompt || "未提供额外人格规则。",
     "",
     "【最近消息】",
     formatHistory(history),
@@ -449,9 +489,10 @@ async function handleChat(req, res, agentId) {
     topK: config.kbTopK,
     minScore: config.kbMinScore,
   });
-  const systemPrompt = systemPromptStore.read();
+  const stylePrompt =
+    (colleagueSkillStore && colleagueSkillStore.read()) || systemPromptStore.read();
   const message = buildAgentMessage({
-    systemPrompt,
+    stylePrompt,
     userMessage,
     history,
     knowledgeHits,
@@ -529,6 +570,7 @@ const server = http.createServer(async (req, res) => {
         service: "sudan-agent-bridge",
         defaultAgentId: config.defaultAgentId,
         knowledgeFile: knowledgeStore.absolutePath,
+        colleagueSkillFile: colleagueSkillStore ? colleagueSkillStore.absolutePath : "",
         systemPromptFile: systemPromptStore.absolutePath,
         openclawBin: config.openclawBin,
       });
