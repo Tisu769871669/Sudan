@@ -247,13 +247,26 @@ function extractConversation(payload) {
     .filter(Boolean)
     .slice(-config.maxHistoryMessages);
 
-  let userMessage = [payload.message, payload.content, nestedContent?.message]
-    .find((value) => typeof value === "string" && value.trim())
-    ?.trim();
+  let messageSource = "";
+  let userMessage = "";
+
+  if (typeof payload.message === "string" && payload.message.trim()) {
+    userMessage = payload.message.trim();
+    messageSource = "message";
+  } else if (typeof payload.content === "string" && payload.content.trim()) {
+    userMessage = payload.content.trim();
+    messageSource = "content_string";
+  } else if (typeof nestedContent?.message === "string" && nestedContent.message.trim()) {
+    userMessage = nestedContent.message.trim();
+    messageSource = "content.message";
+  }
 
   if (!userMessage) {
     const lastUser = [...history].reverse().find((item) => item.role === "user");
     userMessage = lastUser?.text || "";
+    if (userMessage) {
+      messageSource = "message_list_last_user";
+    }
   }
 
   if (!userMessage) {
@@ -264,8 +277,21 @@ function extractConversation(payload) {
     conversationId,
     userId,
     history,
+    messageSource,
     userMessage,
   };
+}
+
+function hashText(value) {
+  return crypto.createHash("sha1").update(String(value || ""), "utf8").digest("hex").slice(0, 12);
+}
+
+function previewText(value, maxLength = 80) {
+  const text = String(value || "").replace(/\s+/g, " ").trim();
+  if (text.length <= maxLength) {
+    return text;
+  }
+  return text.slice(0, maxLength) + "...";
 }
 
 function buildSessionId(agentId, conversationId) {
@@ -483,7 +509,7 @@ async function handleChat(req, res, agentId) {
 
   const payload = await readJsonBody(req);
   const traceId = crypto.randomUUID();
-  const { conversationId, userId, history, userMessage } = extractConversation(payload);
+  const { conversationId, userId, history, messageSource, userMessage } = extractConversation(payload);
   const sessionId = buildSessionId(agentId, conversationId);
   const knowledgeHits = knowledgeStore.search(userMessage, {
     topK: config.kbTopK,
@@ -504,6 +530,10 @@ async function handleChat(req, res, agentId) {
     userId,
     sessionId,
     traceId,
+    messageSource,
+    userMessagePreview: previewText(userMessage),
+    userMessageHash: hashText(userMessage),
+    historyCount: history.length,
     knowledgeHits: knowledgeHits.length,
   });
 
@@ -511,6 +541,15 @@ async function handleChat(req, res, agentId) {
     agentId,
     sessionId,
     message,
+  });
+
+  log("info", "reply generated", {
+    agentId,
+    conversationId,
+    sessionId,
+    traceId,
+    replyPreview: previewText(result.reply),
+    replyHash: hashText(result.reply),
   });
 
   sendJson(
