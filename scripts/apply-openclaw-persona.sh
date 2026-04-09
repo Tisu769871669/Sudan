@@ -77,6 +77,7 @@ main() {
     exit 1
   fi
 
+  run_python "$ROOT_DIR/build/sync-colleague-distill.py"
   run_python "$ROOT_DIR/build/compose-system-prompt.py"
 
   if [[ ! -f "$GENERATED_PROMPT" ]]; then
