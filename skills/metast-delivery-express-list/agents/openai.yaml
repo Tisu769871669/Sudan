@@ -1,0 +1,4 @@
+interface:
+  display_name: "Metast Express List"
+  short_description: "Fetch courier companies from Metast MCP API"
+  default_prompt: "Use $metast-delivery-express-list to fetch the current courier company list from the Metast MCP API."

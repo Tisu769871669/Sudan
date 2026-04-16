@@ -1,0 +1,4 @@
+interface:
+  display_name: "Metast Product List"
+  short_description: "Fetch listed products from Metast MCP API"
+  default_prompt: "Use $metast-product-list to fetch the current listed products from the Metast MCP API."
