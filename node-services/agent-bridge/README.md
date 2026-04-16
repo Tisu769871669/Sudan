@@ -103,19 +103,6 @@ Content-Type: application/json; charset=utf-8
 - 必填：否
 - 说明：消息文本
 
-## 聚合策略
-
-- 同一个 `conversationId` 在短时间内连续发来的多条消息，会先进入聚合窗口
-- 默认窗口：`2500ms`
-- bridge 会把这几条消息合并成一轮输入，再调用一次 agent
-- FAQ 命中也按聚合后的完整文本一起计算
-
-### 聚合后的返回行为
-
-- 同一轮聚合中，只有最后一个请求会拿到真正的 `reply`
-- 前面的请求会返回 `ok: true`，但 `reply` 为空字符串
-- 发送层应只对非空 `reply` 执行发微信动作
-
 ## 当前服务端取值规则
 
 - `conversationId` 或 `conversation_id` 必须至少有一个
