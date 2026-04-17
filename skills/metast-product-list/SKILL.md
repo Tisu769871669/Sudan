@@ -18,7 +18,7 @@ Ensure these environment variables are set:
 Run:
 
 ```bash
-python scripts/fetch_product_list.py
+python3 scripts/fetch_product_list.py
 ```
 
 ## Workflow

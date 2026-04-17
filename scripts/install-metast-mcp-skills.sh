@@ -17,3 +17,7 @@ echo "Remember to export:"
 echo "  METAST_MCP_BASE_URL=https://lx.metast.cn"
 echo "  METAST_MCP_KEY=<your key>"
 echo "  METAST_MCP_SECRET=<your secret>"
+echo
+echo "Test with:"
+echo "  python3 \$HOME/.openclaw/workspace/skills/metast-product-list/scripts/fetch_product_list.py"
+echo "  python3 \$HOME/.openclaw/workspace/skills/metast-delivery-express-list/scripts/fetch_delivery_express_list.py"
