@@ -9,3 +9,4 @@ node-services/agent-bridge/*.log
 node-services/agent-bridge/.data/
 external/
 tmp/
+.env.metast
