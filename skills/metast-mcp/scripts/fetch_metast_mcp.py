@@ -17,13 +17,18 @@ ENDPOINTS = {
 }
 
 
-def build_url(base_url: str, action: str, order_no: str) -> str:
+def build_url(base_url: str, action: str, order_no: str, product_name: str) -> str:
     path = ENDPOINTS[action]
     url = f"{base_url.rstrip('/')}{path}"
+    query = {}
+    if action == "product-list" and product_name:
+        query["name"] = product_name
     if action == "order-list":
         if not order_no:
             raise ValueError("order-list requires --no ORDER_NO")
-        url = f"{url}?{urlencode({'no': order_no})}"
+        query["no"] = order_no
+    if query:
+        url = f"{url}?{urlencode(query)}"
     return url
 
 
@@ -34,6 +39,7 @@ def main() -> int:
         choices=["product-list", "delivery-express-list", "order-list"],
         help="Which endpoint to call",
     )
+    parser.add_argument("--name", help="Product name filter, optional for product-list")
     parser.add_argument("--no", help="Order number, required for order-list")
     args = parser.parse_args()
 
@@ -46,7 +52,7 @@ def main() -> int:
         return 1
 
     try:
-        url = build_url(base_url, args.action, args.no or "")
+        url = build_url(base_url, args.action, args.no or "", args.name or "")
     except ValueError as error:
         print(str(error), file=sys.stderr)
         return 1

@@ -19,6 +19,8 @@ Environment variables expected by the bundled script:
 
 - Method: `GET`
 - Path: `/app-api/mcp/api-mcp/productList`
+- Query params:
+  - `name`: optional product name filter
 
 ## 2. Delivery Express List
 

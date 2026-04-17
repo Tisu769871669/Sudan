@@ -18,5 +18,6 @@ echo "  METAST_MCP_SECRET=<your secret>"
 echo
 echo "Test with:"
 echo "  python3 \$HOME/.openclaw/workspace/skills/metast-mcp/scripts/fetch_metast_mcp.py product-list"
+echo "  python3 \$HOME/.openclaw/workspace/skills/metast-mcp/scripts/fetch_metast_mcp.py product-list --name 商品名"
 echo "  python3 \$HOME/.openclaw/workspace/skills/metast-mcp/scripts/fetch_metast_mcp.py delivery-express-list"
 echo "  python3 \$HOME/.openclaw/workspace/skills/metast-mcp/scripts/fetch_metast_mcp.py order-list --no ORDER_NO"

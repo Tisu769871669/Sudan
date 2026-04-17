@@ -23,6 +23,7 @@ Run one of these:
 
 ```bash
 python3 scripts/fetch_metast_mcp.py product-list
+python3 scripts/fetch_metast_mcp.py product-list --name 商品名
 python3 scripts/fetch_metast_mcp.py delivery-express-list
 python3 scripts/fetch_metast_mcp.py order-list --no ORDER_NO
 ```
@@ -35,6 +36,7 @@ Use:
 
 ```bash
 python3 scripts/fetch_metast_mcp.py product-list
+python3 scripts/fetch_metast_mcp.py product-list --name 商品名
 ```
 
 Use when the user asks:
@@ -42,6 +44,8 @@ Use when the user asks:
 - 现在上架了哪些商品
 - 当前有哪些商品在卖
 - 帮我查一下商品列表
+- 查一下某个商品有没有上架
+- 按名称查商品
 
 ### 2. Delivery Express List
 
@@ -73,14 +77,17 @@ Use when the user provides an order number and wants order information.
 2. Send a `GET` request with headers:
    - `mcpKey`
    - `mcpSecret`
-3. Parse the JSON response.
-4. Summarize the useful fields for the user.
-5. If the API returns an error, report the real error and do not fabricate data.
+3. If the action is `product-list` and the user gave a product name, pass it as query param `name`.
+4. If the action is `order-list`, pass the order number as query param `no`.
+5. Parse the JSON response.
+6. Summarize the useful fields for the user.
+7. If the API returns an error, report the real error and do not fabricate data.
 
 ## Output Guidance
 
 - For broad questions, summarize rather than dump raw JSON.
 - For exact questions, include the exact returned fields.
+- For `product-list`, prefer using `--name` when the user clearly asks about a specific product.
 - For `order-list`, require an order number before calling.
 - Keep the response concise unless the user asks for full details.
 
