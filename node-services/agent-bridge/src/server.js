@@ -30,6 +30,8 @@ const config = {
   kbMinScore: Number(process.env.KB_MIN_SCORE || 3),
   maxHistoryMessages: Number(process.env.MAX_HISTORY_MESSAGES || 8),
   debounceWindowMs: Number(process.env.DEBOUNCE_WINDOW_MS || 2500),
+  incompleteMessageExtraWaitMs: Number(process.env.INCOMPLETE_MESSAGE_EXTRA_WAIT_MS || 2500),
+  maxDebounceWindowMs: Number(process.env.MAX_DEBOUNCE_WINDOW_MS || 6000),
   logLevel: process.env.LOG_LEVEL || "info",
 };
 
@@ -322,6 +324,46 @@ function mergeHistories(items, maxMessages) {
   return merged.slice(-maxMessages);
 }
 
+function looksIncompleteMessage(message) {
+  const text = String(message || "").trim();
+  if (!text) {
+    return false;
+  }
+
+  const normalized = text.replace(/\s+/g, "");
+  const explicitCompletePatterns = [
+    /[?？]$/,
+    /(多少钱|怎么卖|有没有|还有吗|怎么吃|怎么用|帮我查|查一下|订单号|快递|发货|退款|售后)/,
+    /\d{8,}/,
+  ];
+  if (explicitCompletePatterns.some((pattern) => pattern.test(normalized))) {
+    return false;
+  }
+
+  const incompleteTailPatterns = [
+    /[，,、:：]$/,
+    /(我想问|问一下|我想咨询|就是|然后|还有|另外|那个|这个|嗯|额|呃)$/,
+  ];
+  if (incompleteTailPatterns.some((pattern) => pattern.test(normalized))) {
+    return true;
+  }
+
+  if (Array.from(normalized).length <= 4 && !/(你好|您好|谢谢|好的|收到|在吗|早上好|晚上好)/.test(normalized)) {
+    return true;
+  }
+
+  return false;
+}
+
+function calculateDebounceMs(queue) {
+  const last = queue.pending[queue.pending.length - 1];
+  const base = Math.max(0, config.debounceWindowMs);
+  if (!last || !looksIncompleteMessage(last.userMessage)) {
+    return base;
+  }
+  return Math.min(base + Math.max(0, config.incompleteMessageExtraWaitMs), Math.max(base, config.maxDebounceWindowMs));
+}
+
 function getConversationQueue(agentId, conversationId) {
   const key = `${agentId}::${conversationId}`;
   let queue = conversationQueues.get(key);
@@ -345,22 +387,26 @@ function enqueueChatTurn(request) {
   return new Promise((resolve) => {
     queue.pending.push({ ...request, resolve });
 
+    const debounceMs = calculateDebounceMs(queue);
+
     log("info", "request queued", {
       agentId: request.agentId,
       conversationId: request.conversationId,
       traceId: request.traceId,
       queuedCount: queue.pending.length,
       running: queue.running,
+      debounceMs,
+      looksIncomplete: looksIncompleteMessage(request.userMessage),
       messageSource: request.messageSource,
       userMessagePreview: previewText(request.userMessage),
       userMessageHash: hashText(request.userMessage),
     });
 
-    scheduleConversationQueue(queue);
+    scheduleConversationQueue(queue, debounceMs);
   });
 }
 
-function scheduleConversationQueue(queue) {
+function scheduleConversationQueue(queue, delayMs = null) {
   if (queue.running) {
     return;
   }
@@ -369,6 +415,7 @@ function scheduleConversationQueue(queue) {
     clearTimeout(queue.timer);
   }
 
+  const waitMs = delayMs ?? calculateDebounceMs(queue);
   queue.timer = setTimeout(() => {
     queue.timer = null;
     processConversationQueue(queue).catch((error) => {
@@ -378,7 +425,7 @@ function scheduleConversationQueue(queue) {
         message: error.message,
       });
     });
-  }, Math.max(0, config.debounceWindowMs));
+  }, Math.max(0, waitMs));
 }
 
 async function processConversationQueue(queue) {
@@ -817,5 +864,6 @@ module.exports = {
   createErrorPayload,
   createSuccessPayload,
   extractConversation,
+  looksIncompleteMessage,
   startServer,
 };

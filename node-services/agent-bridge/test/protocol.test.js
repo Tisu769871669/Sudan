@@ -5,6 +5,7 @@ const {
   createErrorPayload,
   createSuccessPayload,
   extractConversation,
+  looksIncompleteMessage,
 } = require("../src/server");
 
 test("extractConversation accepts conversation_id and user_id", () => {
@@ -57,4 +58,11 @@ test("createErrorPayload matches external error schema", () => {
     message: "conversationId is required",
     trace_id: "trace_002",
   });
+});
+
+test("looksIncompleteMessage detects likely unfinished fragments", () => {
+  assert.equal(looksIncompleteMessage("我想问一下"), true);
+  assert.equal(looksIncompleteMessage("还有"), true);
+  assert.equal(looksIncompleteMessage("黄精怎么吃？"), false);
+  assert.equal(looksIncompleteMessage("订单号 123456789"), false);
 });
