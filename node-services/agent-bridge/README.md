@@ -218,3 +218,12 @@ Content-Type: application/json; charset=utf-8
 - 同一个用户必须固定使用同一个 `conversationId`
 - `conversationId` 是主上下文键
 - `messageList` 只是辅助上下文，不是必须
+
+## 防抖与队列
+
+- 同一个 `conversationId` 短时间连续发来的消息会先等待一个防抖窗口。
+- 默认窗口是 `2500ms`，可通过 `DEBOUNCE_WINDOW_MS` 配置。
+- 防抖窗口内的多条消息会合并成一轮输入，知识库命中也按合并后的文本计算。
+- 同一个 `conversationId` 如果上一轮 AI 还在运行，后续消息不会丢，会排队等待上一轮结束。
+- 同一批合并消息里，只有最后一个请求返回真正的 `reply`；前面的请求返回 `reply: ""`。
+- 调用方应只把非空 `reply` 发回微信。
