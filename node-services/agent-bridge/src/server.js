@@ -74,6 +74,17 @@ function log(level, message, extra = undefined) {
   console.log(`[agent-bridge] ${level}: ${message}${payload}`);
 }
 
+function logBlock(title, fields) {
+  const lines = [`[agent-bridge] ${title}`];
+  for (const [key, value] of Object.entries(fields)) {
+    if (value === undefined || value === null || value === "") {
+      continue;
+    }
+    lines.push(`  ${key}: ${String(value)}`);
+  }
+  console.log(lines.join("\n"));
+}
+
 function createTextFileStore(filePath) {
   const absolutePath = path.resolve(filePath);
   let cachedMtimeMs = 0;
@@ -389,7 +400,7 @@ function enqueueChatTurn(request) {
 
     const debounceMs = calculateDebounceMs(queue);
 
-    log("info", "request queued", {
+    const queuedLog = {
       agentId: request.agentId,
       conversationId: request.conversationId,
       traceId: request.traceId,
@@ -400,6 +411,19 @@ function enqueueChatTurn(request) {
       messageSource: request.messageSource,
       userMessagePreview: previewText(request.userMessage),
       userMessageHash: hashText(request.userMessage),
+    };
+
+    log("info", "request queued", queuedLog);
+    logBlock("queued", {
+      traceId: queuedLog.traceId,
+      conversationId: queuedLog.conversationId,
+      message: queuedLog.userMessagePreview,
+      source: queuedLog.messageSource,
+      hash: queuedLog.userMessageHash,
+      queuedCount: queuedLog.queuedCount,
+      running: queuedLog.running,
+      debounceMs: queuedLog.debounceMs,
+      looksIncomplete: queuedLog.looksIncomplete,
     });
 
     scheduleConversationQueue(queue, debounceMs);
@@ -452,7 +476,7 @@ async function processConversationQueue(queue) {
     knowledgeHits,
   });
 
-  log("info", "conversation batch started", {
+  const batchLog = {
     agentId: primary.agentId,
     conversationId: primary.conversationId,
     sessionId,
@@ -462,6 +486,18 @@ async function processConversationQueue(queue) {
     mergedUserMessageHash: hashText(mergedUserMessage),
     historyCount: mergedHistory.length,
     knowledgeHits: knowledgeHits.length,
+  };
+
+  log("info", "conversation batch started", batchLog);
+  logBlock("batch started", {
+    traceId: batchLog.traceId,
+    conversationId: batchLog.conversationId,
+    sessionId: batchLog.sessionId,
+    batchCount: batchLog.batchCount,
+    mergedMessage: batchLog.mergedUserMessagePreview,
+    mergedHash: batchLog.mergedUserMessageHash,
+    historyCount: batchLog.historyCount,
+    knowledgeHits: batchLog.knowledgeHits,
   });
 
   try {
@@ -471,7 +507,7 @@ async function processConversationQueue(queue) {
       message,
     });
 
-    log("info", "reply generated", {
+    const replyLog = {
       agentId: primary.agentId,
       conversationId: primary.conversationId,
       sessionId,
@@ -479,6 +515,16 @@ async function processConversationQueue(queue) {
       batchCount: batch.length,
       replyPreview: previewText(result.reply),
       replyHash: hashText(result.reply),
+    };
+
+    log("info", "reply generated", replyLog);
+    logBlock("reply generated", {
+      traceId: replyLog.traceId,
+      conversationId: replyLog.conversationId,
+      sessionId: replyLog.sessionId,
+      batchCount: replyLog.batchCount,
+      reply: replyLog.replyPreview,
+      replyHash: replyLog.replyHash,
     });
 
     batch.forEach((item, index) => {
@@ -747,7 +793,7 @@ async function handleChat(req, res, agentId) {
   const payload = await readJsonBody(req);
   const traceId = crypto.randomUUID();
   const { conversationId, userId, history, messageSource, userMessage } = extractConversation(payload);
-  log("info", "handling chat request", {
+  const requestLog = {
     agentId,
     conversationId,
     userId,
@@ -756,6 +802,17 @@ async function handleChat(req, res, agentId) {
     userMessagePreview: previewText(userMessage),
     userMessageHash: hashText(userMessage),
     historyCount: history.length,
+  };
+
+  log("info", "handling chat request", requestLog);
+  logBlock("request received", {
+    traceId: requestLog.traceId,
+    conversationId: requestLog.conversationId,
+    userId: requestLog.userId,
+    source: requestLog.messageSource,
+    message: requestLog.userMessagePreview,
+    messageHash: requestLog.userMessageHash,
+    historyCount: requestLog.historyCount,
   });
 
   const result = await enqueueChatTurn({
