@@ -19,9 +19,9 @@ ENDPOINTS = {
     "member-user-list": "/app-api/mcp/api-mcp/memberUserList",
     "member-user-order-list": "/app-api/mcp/api-mcp/memberUserOrderList",
     "order-user-delivery": "/app-api/mcp/api-mcp/orderUserdelivery",
-    "im-group-list": "/system/api/im/groupList",
-    "send-chat-message": "/system/api/im/sendChatMesage",
-    "send-group-message": "/system/api/im/sendGroupMesage",
+    "im-group-list": "/prod-api/system/api/im/groupList",
+    "send-chat-message": "/prod-api/system/api/im/sendChatMesage",
+    "send-group-message": "/prod-api/system/api/im/sendGroupMesage",
 }
 
 PAGINATED_ACTIONS = {

@@ -74,7 +74,7 @@ Credential loading order:
 ## 8. IM Group List
 
 - Method: `GET`
-- Path: `/system/api/im/groupList`
+- Path: `/prod-api/system/api/im/groupList`
 - Query params:
   - `pageNo`: page number
   - `pageSize`: page size
@@ -82,7 +82,7 @@ Credential loading order:
 ## 9. Send Single Chat Message
 
 - Method: `GET`
-- Path: `/system/api/im/sendChatMesage`
+- Path: `/prod-api/system/api/im/sendChatMesage`
 - Query params:
   - `mobile`: recipient mobile number
   - `content`: message content
@@ -90,7 +90,7 @@ Credential loading order:
 ## 10. Send Group Message
 
 - Method: `GET`
-- Path: `/system/api/im/sendGroupMesage`
+- Path: `/prod-api/system/api/im/sendGroupMesage`
 - Query params:
   - `groupId`: group chat ID
   - `content`: message content

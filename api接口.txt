@@ -1,0 +1,114 @@
+# Metast MCP 客服接口文档
+
+更新时间：2026-04-24
+
+## 基础信息
+
+- Base URL：`https://lx.metast.cn`
+- 请求方式：全部为 `GET`
+- 通用 Header：
+  - `mcpKey: <MCP key>`
+  - `mcpSecret: <MCP secret>`
+  - `Accept: application/json`
+
+## 当前验证状态
+
+| 接口 | 状态 | 备注 |
+| --- | --- | --- |
+| `yugaoList` | 已验证可用 | 返回 `code=0` |
+| `memberUserList` | 已修复并验证可用 | `pageNo` / `pageSize` 已可正常分页返回 |
+| `memberUserOrderList` | 待用真实 `userId` 验证 | 参数按后端文档实现 |
+| `orderUserdelivery` | 待用真实 `orderId` 验证 | 参数按后端文档实现 |
+| `groupList` | 已验证可用 | 使用 `/prod-api/system/api/im/groupList`，返回 `HTTP=200` / 业务 `code=200` |
+| `sendChatMesage` | 待内部测试 | 会真实发送消息，测试前确认手机号和内容 |
+| `sendGroupMesage` | 待内部测试 | 会真实发送群消息，不能直接拿会员 `groupId` 当 IM 群 ID |
+
+## 接口详情
+
+### 1. 获得预告
+
+- URL：`/app-api/mcp/api-mcp/yugaoList`
+- 参数：无
+- 示例：
+
+```bash
+curl -sS -G "https://lx.metast.cn/app-api/mcp/api-mcp/yugaoList" \
+  -H "mcpKey: $METAST_MCP_KEY" \
+  -H "mcpSecret: $METAST_MCP_SECRET" \
+  -H "Accept: application/json"
+```
+
+### 2. 获得用户信息分页
+
+- URL：`/app-api/mcp/api-mcp/memberUserList`
+- 参数：
+  - `pageNo`：Integer，页码，必填
+  - `pageSize`：Integer，每页数量，必填
+- 示例：
+
+```bash
+curl -sS -G "https://lx.metast.cn/app-api/mcp/api-mcp/memberUserList" \
+  -H "mcpKey: $METAST_MCP_KEY" \
+  -H "mcpSecret: $METAST_MCP_SECRET" \
+  -H "Accept: application/json" \
+  --data-urlencode "pageNo=1" \
+  --data-urlencode "pageSize=10"
+```
+
+### 3. 获得用户订单分页
+
+- URL：`/app-api/mcp/api-mcp/memberUserOrderList`
+- 参数：
+  - `pageNo`：Integer，页码，必填
+  - `pageSize`：Integer，每页数量，必填
+  - `userId`：Long，用户 ID，必填
+
+### 4. 获得订单物流
+
+- URL：`/app-api/mcp/api-mcp/orderUserdelivery`
+- 参数：
+  - `orderId`：Long，订单 ID，必填
+
+### 5. 获取群聊
+
+- URL：`/prod-api/system/api/im/groupList`
+- 参数：
+  - `pageNo`：Integer，页码，必填
+  - `pageSize`：Integer，每页数量，必填
+- 验证结果：
+  - `HTTP=200`
+  - 业务 `code=200`
+- 示例：
+
+```bash
+curl -sS -G "https://lx.metast.cn/prod-api/system/api/im/groupList" \
+  -H "mcpKey: $METAST_MCP_KEY" \
+  -H "mcpSecret: $METAST_MCP_SECRET" \
+  -H "Accept: application/json" \
+  --data-urlencode "pageNo=1" \
+  --data-urlencode "pageSize=20"
+```
+
+### 6. 发送单人消息
+
+- URL：`/prod-api/system/api/im/sendChatMesage`
+- 参数：
+  - `mobile`：String，接收人手机号，必填
+  - `content`：String，消息内容，必填
+- 注意：
+  - 该接口会真实发送消息。
+  - 内部测试建议使用明确文案，例如：`【内部测试】MCP个人消息发送测试，收到可忽略。`
+
+### 7. 发送群消息
+
+- URL：`/prod-api/system/api/im/sendGroupMesage`
+- 参数：
+  - `groupId`：String，IM 群聊 ID，必填
+  - `content`：String，消息内容，必填
+- 注意：
+  - 该接口会真实发送群消息。
+  - `memberUserList` 返回的会员 `groupId` 是会员分组 ID，不一定是 IM 群聊 ID；群发前必须先通过可用的群聊接口确认真正的群聊 `groupId`。
+
+## 已知补充
+
+- `productList` 不在本批新增接口里，但当前后端表现为必须传非空 `name`；不带 `name` 会返回 `请求参数缺失:name`，传空 `name` 会返回 `商品名称不能为空`。

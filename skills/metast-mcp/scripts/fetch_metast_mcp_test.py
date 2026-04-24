@@ -137,7 +137,7 @@ class BuildUrlTest(unittest.TestCase):
         )
 
         self.assertTrue(
-            url.startswith("https://example.invalid/system/api/im/groupList?")
+            url.startswith("https://example.invalid/prod-api/system/api/im/groupList?")
         )
         self.assertEqual(self.query_for(url), {"pageNo": ["3"], "pageSize": ["10"]})
 
@@ -148,6 +148,11 @@ class BuildUrlTest(unittest.TestCase):
             {"mobile": "13800000000", "content": "hello"},
         )
 
+        self.assertTrue(
+            url.startswith(
+                "https://example.invalid/prod-api/system/api/im/sendChatMesage?"
+            )
+        )
         self.assertEqual(
             self.query_for(url),
             {"mobile": ["13800000000"], "content": ["hello"]},
@@ -160,6 +165,23 @@ class BuildUrlTest(unittest.TestCase):
                 "send-group-message",
                 {"content": "hello"},
             )
+
+    def test_send_group_message_uses_group_id_and_content(self) -> None:
+        url = fetch_metast_mcp.build_url(
+            "https://example.invalid",
+            "send-group-message",
+            {"group_id": "test-group", "content": "hello"},
+        )
+
+        self.assertTrue(
+            url.startswith(
+                "https://example.invalid/prod-api/system/api/im/sendGroupMesage?"
+            )
+        )
+        self.assertEqual(
+            self.query_for(url),
+            {"groupId": ["test-group"], "content": ["hello"]},
+        )
 
 
 if __name__ == "__main__":
