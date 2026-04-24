@@ -7,11 +7,18 @@ TARGET_DIR="${TARGET_DIR:-$HOME/.openclaw/workspace/skills}"
 mkdir -p "$TARGET_DIR"
 rm -rf "$TARGET_DIR/metast-product-list" "$TARGET_DIR/metast-delivery-express-list" "$TARGET_DIR/metast-mcp"
 cp -R "$ROOT_DIR/skills/metast-mcp" "$TARGET_DIR/metast-mcp"
+if [[ -f "$ROOT_DIR/.env.metast" ]]; then
+  cp "$ROOT_DIR/.env.metast" "$TARGET_DIR/metast-mcp/.env.metast"
+  chmod 600 "$TARGET_DIR/metast-mcp/.env.metast"
+fi
 
 echo "Installed skills to: $TARGET_DIR"
 echo "- metast-mcp"
+if [[ -f "$TARGET_DIR/metast-mcp/.env.metast" ]]; then
+  echo "Copied Metast MCP env file to: $TARGET_DIR/metast-mcp/.env.metast"
+fi
 echo
-echo "Remember to export:"
+echo "If no .env.metast file was copied, remember to export:"
 echo "  METAST_MCP_BASE_URL=https://lx.metast.cn"
 echo "  METAST_MCP_KEY=<your key>"
 echo "  METAST_MCP_SECRET=<your secret>"

@@ -13,7 +13,15 @@ Use this skill when the agent needs live Metast MCP data for:
 
 ## Quick Start
 
-Ensure these environment variables are set:
+Ensure credentials are available. The bundled script first loads the first existing file from:
+
+- `METAST_MCP_ENV_FILE`, if set
+- the installed skill directory: `~/.openclaw/workspace/skills/metast-mcp/.env.metast`
+- the current working directory: `.env.metast`
+- `~/Sudan/.env.metast`
+- `~/.openclaw/.env.metast`
+
+The env file should define:
 
 - `METAST_MCP_BASE_URL`
 - `METAST_MCP_KEY`
