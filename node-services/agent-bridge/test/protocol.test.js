@@ -1,6 +1,7 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const {
+  buildAgentMessage,
   buildSessionId,
   createErrorPayload,
   createSuccessPayload,
@@ -65,4 +66,20 @@ test("looksIncompleteMessage detects likely unfinished fragments", () => {
   assert.equal(looksIncompleteMessage("还有"), true);
   assert.equal(looksIncompleteMessage("黄精怎么吃？"), false);
   assert.equal(looksIncompleteMessage("订单号 123456789"), false);
+});
+
+test("buildAgentMessage starts with metast-mcp guidance and drops repeated persona wording", () => {
+  const message = buildAgentMessage({
+    stylePrompt: "补充上下文",
+    userMessage: "查一下订单",
+    history: [{ role: "user", text: "你好" }],
+    knowledgeHits: [],
+  });
+
+  assert.equal(
+    message.startsWith("当前客服可使用的 skill 为 `metast-mcp`。遇到实时商品、快递、订单查询时优先使用它。"),
+    true
+  );
+  assert.equal(message.includes("你必须优先遵守下方“苏丹人格与回复规则”"), false);
+  assert.equal(message.includes("优先使用 sudan skill 里的人格、语气、承接方式来回复"), false);
 });
