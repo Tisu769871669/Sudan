@@ -610,6 +610,7 @@ function formatKnowledgeHits(hits) {
 function buildAgentMessage({ userMessage, history, knowledgeHits }) {
   return [
     "当前客服可使用的 skill 为 `metast-mcp`。遇到实时商品、快递、订单查询时优先使用它。",
+    "商品的价格、规格、保质期、区别、库存、是否上架、当前可售状态都属于实时商品问题，必须先查 `metast-mcp`，不要先说不知道或转人工。",
     "以下是桥接层提供的隐藏上下文，请直接回复用户，不要提到“桥接层”“上下文”“资料来源”这类字眼。",
     "回复务必更口语、更短。优先 1 到 3 句话，能短就短。",
     "除非用户明确追问，不要一次讲太多，不要写成长段说明文。",

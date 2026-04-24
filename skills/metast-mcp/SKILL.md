@@ -54,6 +54,9 @@ Use when the user asks:
 - 帮我查一下商品列表
 - 查一下某个商品有没有上架
 - 按名称查商品
+- 商品价格、规格、净含量、数量、保质期、保存方式
+- 两款商品有什么区别，例如“168 元和 88 元有什么区别”
+- 鸡蛋、猪肉、山药粉等当前售卖商品的实时详情
 
 ### 2. Delivery Express List
 
@@ -85,7 +88,7 @@ Use when the user provides an order number and wants order information.
 2. Send a `GET` request with headers:
    - `mcpKey`
    - `mcpSecret`
-3. If the action is `product-list` and the user gave a product name, pass it as query param `name`.
+3. If the action is `product-list` and the user gave a product name or asked about a product detail, pass the product keyword as query param `name`.
 4. If the action is `order-list`, pass the order number as query param `no`.
 5. Parse the JSON response.
 6. Summarize the useful fields for the user.
@@ -96,6 +99,7 @@ Use when the user provides an order number and wants order information.
 - For broad questions, summarize rather than dump raw JSON.
 - For exact questions, include the exact returned fields.
 - For `product-list`, prefer using `--name` when the user clearly asks about a specific product.
+- Treat price, specification, shelf life, storage method, stock, sale status, and product comparisons as `product-list` questions.
 - For `order-list`, require an order number before calling.
 - Keep the response concise unless the user asks for full details.
 

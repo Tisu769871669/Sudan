@@ -95,3 +95,14 @@ test("buildAgentMessage does not inject raw colleague skill content", () => {
   assert.equal(message.includes("【苏丹人格与回复规则】"), false);
   assert.equal(message.includes("私域用户咨询接待，产品介绍与答疑"), false);
 });
+
+test("buildAgentMessage tells the agent to use metast-mcp for product detail questions", () => {
+  const message = buildAgentMessage({
+    userMessage: "绿壳五黑土鸡蛋168元和88元有什么区别，规格多少枚？",
+    history: [],
+    knowledgeHits: [],
+  });
+
+  assert.equal(message.includes("价格、规格、保质期、区别、库存、是否上架"), true);
+  assert.equal(message.includes("先查 `metast-mcp`"), true);
+});
