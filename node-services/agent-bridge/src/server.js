@@ -467,10 +467,7 @@ async function processConversationQueue(queue) {
     topK: config.kbTopK,
     minScore: config.kbMinScore,
   });
-  const stylePrompt =
-    (colleagueSkillStore && colleagueSkillStore.read()) || systemPromptStore.read();
   const message = buildAgentMessage({
-    stylePrompt,
     userMessage: mergedUserMessage,
     history: mergedHistory,
     knowledgeHits,
@@ -610,18 +607,17 @@ function formatKnowledgeHits(hits) {
     .join("\n\n");
 }
 
-function buildAgentMessage({ stylePrompt, userMessage, history, knowledgeHits }) {
+function buildAgentMessage({ userMessage, history, knowledgeHits }) {
   return [
+    "当前客服可使用的 skill 为 `metast-mcp`。遇到实时商品、快递、订单查询时优先使用它。",
     "以下是桥接层提供的隐藏上下文，请直接回复用户，不要提到“桥接层”“上下文”“资料来源”这类字眼。",
-    "你必须优先遵守下方“苏丹人格与回复规则”。如果它与当前 agent 的默认身份冲突，以这份规则为准。",
-    "优先使用 sudan skill 里的人格、语气、承接方式来回复，但业务事实仍以知识库和规则为准。",
     "回复务必更口语、更短。优先 1 到 3 句话，能短就短。",
     "除非用户明确追问，不要一次讲太多，不要写成长段说明文。",
     "如果知识命中不相关，请忽略，不要硬答。",
     "如果知识不足，请自然兜底并引导人工或进一步描述。",
     "",
-    "【苏丹人格与回复规则】",
-    stylePrompt || "未提供额外人格规则。",
+    "【当前 agent 风格来源】",
+    "以 OpenClaw main agent 已安装的系统提示词和 sudan skill 为准，桥接层不重复注入完整人格或 skill 文件。",
     "",
     "【最近消息】",
     formatHistory(history),
@@ -917,6 +913,7 @@ if (require.main === module) {
 }
 
 module.exports = {
+  buildAgentMessage,
   buildSessionId,
   createErrorPayload,
   createSuccessPayload,

@@ -1,6 +1,7 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const {
+  buildAgentMessage,
   buildSessionId,
   createErrorPayload,
   createSuccessPayload,
@@ -65,4 +66,32 @@ test("looksIncompleteMessage detects likely unfinished fragments", () => {
   assert.equal(looksIncompleteMessage("还有"), true);
   assert.equal(looksIncompleteMessage("黄精怎么吃？"), false);
   assert.equal(looksIncompleteMessage("订单号 123456789"), false);
+});
+
+test("buildAgentMessage does not inject raw colleague skill content", () => {
+  const message = buildAgentMessage({
+    stylePrompt: [
+      "---",
+      "name: colleague-sudan",
+      "description: 苏丹，苏丹食养品牌专属客服",
+      "user-invocable: true",
+      "---",
+      "# 苏丹客服 — Work Skill",
+      "## 职责范围",
+      "- 私域用户咨询接待，产品介绍与答疑",
+    ].join("\n"),
+    userMessage: "查一下订单",
+    history: [{ role: "user", text: "你好" }],
+    knowledgeHits: [],
+  });
+
+  assert.equal(
+    message.startsWith("当前客服可使用的 skill 为 `metast-mcp`。遇到实时商品、快递、订单查询时优先使用它。"),
+    true
+  );
+  assert.equal(message.includes("name: colleague-sudan"), false);
+  assert.equal(message.includes("user-invocable: true"), false);
+  assert.equal(message.includes("# 苏丹客服 — Work Skill"), false);
+  assert.equal(message.includes("【苏丹人格与回复规则】"), false);
+  assert.equal(message.includes("私域用户咨询接待，产品介绍与答疑"), false);
 });
