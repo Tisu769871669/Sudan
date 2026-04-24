@@ -6,6 +6,7 @@ import os
 import tempfile
 import unittest
 from pathlib import Path
+from urllib.parse import parse_qs, urlparse
 
 
 SCRIPT_PATH = Path(__file__).with_name("fetch_metast_mcp.py")
@@ -60,6 +61,105 @@ class EnvFileTest(unittest.TestCase):
             fetch_metast_mcp.load_env_file(env_path)
 
         self.assertEqual(os.environ["METAST_MCP_KEY"], "existing-key")
+
+
+class BuildUrlTest(unittest.TestCase):
+    def query_for(self, url: str) -> dict[str, list[str]]:
+        return parse_qs(urlparse(url).query)
+
+    def test_yugao_list_uses_preview_endpoint_without_required_query(self) -> None:
+        url = fetch_metast_mcp.build_url("https://example.invalid", "yugao-list", {})
+
+        self.assertEqual(
+            url,
+            "https://example.invalid/app-api/mcp/api-mcp/yugaoList",
+        )
+
+    def test_member_user_list_uses_page_params(self) -> None:
+        url = fetch_metast_mcp.build_url(
+            "https://example.invalid",
+            "member-user-list",
+            {"page_no": 2, "page_size": 50},
+        )
+
+        self.assertTrue(
+            url.startswith(
+                "https://example.invalid/app-api/mcp/api-mcp/memberUserList?"
+            )
+        )
+        self.assertEqual(self.query_for(url), {"pageNo": ["2"], "pageSize": ["50"]})
+
+    def test_member_user_order_list_requires_user_id(self) -> None:
+        with self.assertRaisesRegex(ValueError, "--user-id USER_ID"):
+            fetch_metast_mcp.build_url(
+                "https://example.invalid",
+                "member-user-order-list",
+                {"page_no": 1, "page_size": 20},
+            )
+
+    def test_member_user_order_list_uses_user_id_and_page_params(self) -> None:
+        url = fetch_metast_mcp.build_url(
+            "https://example.invalid",
+            "member-user-order-list",
+            {"page_no": 1, "page_size": 20, "user_id": 123},
+        )
+
+        self.assertEqual(
+            self.query_for(url),
+            {"pageNo": ["1"], "pageSize": ["20"], "userId": ["123"]},
+        )
+
+    def test_order_user_delivery_requires_order_id(self) -> None:
+        with self.assertRaisesRegex(ValueError, "--order-id ORDER_ID"):
+            fetch_metast_mcp.build_url(
+                "https://example.invalid",
+                "order-user-delivery",
+                {},
+            )
+
+    def test_order_user_delivery_uses_order_id(self) -> None:
+        url = fetch_metast_mcp.build_url(
+            "https://example.invalid",
+            "order-user-delivery",
+            {"order_id": 456},
+        )
+
+        self.assertEqual(
+            url,
+            "https://example.invalid/app-api/mcp/api-mcp/orderUserdelivery?orderId=456",
+        )
+
+    def test_im_group_list_uses_page_params(self) -> None:
+        url = fetch_metast_mcp.build_url(
+            "https://example.invalid",
+            "im-group-list",
+            {"page_no": 3, "page_size": 10},
+        )
+
+        self.assertTrue(
+            url.startswith("https://example.invalid/system/api/im/groupList?")
+        )
+        self.assertEqual(self.query_for(url), {"pageNo": ["3"], "pageSize": ["10"]})
+
+    def test_send_chat_message_uses_mobile_and_content(self) -> None:
+        url = fetch_metast_mcp.build_url(
+            "https://example.invalid",
+            "send-chat-message",
+            {"mobile": "13800000000", "content": "hello"},
+        )
+
+        self.assertEqual(
+            self.query_for(url),
+            {"mobile": ["13800000000"], "content": ["hello"]},
+        )
+
+    def test_send_group_message_requires_group_id(self) -> None:
+        with self.assertRaisesRegex(ValueError, "--group-id GROUP_ID"):
+            fetch_metast_mcp.build_url(
+                "https://example.invalid",
+                "send-group-message",
+                {"content": "hello"},
+            )
 
 
 if __name__ == "__main__":

@@ -41,3 +41,56 @@ Credential loading order:
 - Path: `/app-api/mcp/api-mcp/orderList`
 - Query params:
   - `no`: order number
+
+## 4. Yugao List
+
+- Method: `GET`
+- Path: `/app-api/mcp/api-mcp/yugaoList`
+
+## 5. Member User List
+
+- Method: `GET`
+- Path: `/app-api/mcp/api-mcp/memberUserList`
+- Query params:
+  - `pageNo`: page number
+  - `pageSize`: page size
+
+## 6. Member User Order List
+
+- Method: `GET`
+- Path: `/app-api/mcp/api-mcp/memberUserOrderList`
+- Query params:
+  - `pageNo`: page number
+  - `pageSize`: page size
+  - `userId`: user ID
+
+## 7. Order User Delivery
+
+- Method: `GET`
+- Path: `/app-api/mcp/api-mcp/orderUserdelivery`
+- Query params:
+  - `orderId`: order ID
+
+## 8. IM Group List
+
+- Method: `GET`
+- Path: `/system/api/im/groupList`
+- Query params:
+  - `pageNo`: page number
+  - `pageSize`: page size
+
+## 9. Send Single Chat Message
+
+- Method: `GET`
+- Path: `/system/api/im/sendChatMesage`
+- Query params:
+  - `mobile`: recipient mobile number
+  - `content`: message content
+
+## 10. Send Group Message
+
+- Method: `GET`
+- Path: `/system/api/im/sendGroupMesage`
+- Query params:
+  - `groupId`: group chat ID
+  - `content`: message content

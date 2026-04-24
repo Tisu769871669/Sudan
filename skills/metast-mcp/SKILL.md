@@ -1,6 +1,6 @@
 ---
 name: metast-mcp
-description: Query the Metast MCP APIs for listed products, courier companies, and order details. Use when the agent needs live data from `https://lx.metast.cn/app-api/mcp/api-mcp/productList`, `deliveryExpressList`, or `orderList` with `mcpKey` and `mcpSecret` headers.
+description: Query and operate Metast MCP customer-service APIs for products, couriers, orders, previews, users, logistics, IM groups, and sending single or group messages. Use when the agent needs live data or customer-service actions from `https://lx.metast.cn` with `mcpKey` and `mcpSecret` headers.
 ---
 
 # Metast MCP
@@ -10,6 +10,11 @@ Use this skill when the agent needs live Metast MCP data for:
 - currently listed products
 - courier company options
 - order lookup by order number
+- previews / pre-sale notices
+- member user lists and a user's order list
+- order logistics by order ID
+- IM group lists
+- single-user or group message sending
 
 ## Quick Start
 
@@ -34,6 +39,13 @@ python3 scripts/fetch_metast_mcp.py product-list
 python3 scripts/fetch_metast_mcp.py product-list --name 商品名
 python3 scripts/fetch_metast_mcp.py delivery-express-list
 python3 scripts/fetch_metast_mcp.py order-list --no ORDER_NO
+python3 scripts/fetch_metast_mcp.py yugao-list
+python3 scripts/fetch_metast_mcp.py member-user-list --page-no 1 --page-size 20
+python3 scripts/fetch_metast_mcp.py member-user-order-list --page-no 1 --page-size 20 --user-id USER_ID
+python3 scripts/fetch_metast_mcp.py order-user-delivery --order-id ORDER_ID
+python3 scripts/fetch_metast_mcp.py im-group-list --page-no 1 --page-size 20
+python3 scripts/fetch_metast_mcp.py send-chat-message --mobile MOBILE --content "消息内容"
+python3 scripts/fetch_metast_mcp.py send-group-message --group-id GROUP_ID --content "消息内容"
 ```
 
 ## Capabilities
@@ -82,6 +94,76 @@ python3 scripts/fetch_metast_mcp.py order-list --no ORDER_NO
 
 Use when the user provides an order number and wants order information.
 
+### 4. Preview / Yugao List
+
+Use:
+
+```bash
+python3 scripts/fetch_metast_mcp.py yugao-list
+```
+
+Use when the user asks about current previews, notices, or pre-sale/advance information.
+
+### 5. Member User List
+
+Use:
+
+```bash
+python3 scripts/fetch_metast_mcp.py member-user-list --page-no 1 --page-size 20
+```
+
+Use when customer service needs paginated member/user information.
+
+### 6. Member User Order List
+
+Use:
+
+```bash
+python3 scripts/fetch_metast_mcp.py member-user-order-list --page-no 1 --page-size 20 --user-id USER_ID
+```
+
+Use when customer service needs a specific user's paginated order list.
+
+### 7. Order Logistics
+
+Use:
+
+```bash
+python3 scripts/fetch_metast_mcp.py order-user-delivery --order-id ORDER_ID
+```
+
+Use when customer service needs logistics or delivery details for an order ID.
+
+### 8. IM Group List
+
+Use:
+
+```bash
+python3 scripts/fetch_metast_mcp.py im-group-list --page-no 1 --page-size 20
+```
+
+Use when customer service needs paginated group chat information.
+
+### 9. Send Single Message
+
+Use:
+
+```bash
+python3 scripts/fetch_metast_mcp.py send-chat-message --mobile MOBILE --content "消息内容"
+```
+
+Use only after confirming the recipient and content. This endpoint sends a real message to one user.
+
+### 10. Send Group Message
+
+Use:
+
+```bash
+python3 scripts/fetch_metast_mcp.py send-group-message --group-id GROUP_ID --content "消息内容"
+```
+
+Use only after confirming the group and content. This endpoint sends a real message to a group.
+
 ## Workflow
 
 1. Choose the correct endpoint based on the user intent.
@@ -90,9 +172,12 @@ Use when the user provides an order number and wants order information.
    - `mcpSecret`
 3. If the action is `product-list` and the user gave a product name or asked about a product detail, pass the product keyword as query param `name`.
 4. If the action is `order-list`, pass the order number as query param `no`.
-5. Parse the JSON response.
-6. Summarize the useful fields for the user.
-7. If the API returns an error, report the real error and do not fabricate data.
+5. For paginated actions (`member-user-list`, `member-user-order-list`, `im-group-list`), pass `--page-no` and `--page-size`.
+6. For user/order/message actions, pass the required IDs or message fields exactly as the script flags describe.
+7. Before using `send-chat-message` or `send-group-message`, confirm the recipient and content because the call sends a real message.
+8. Parse the JSON response.
+9. Summarize the useful fields for the user.
+10. If the API returns an error, report the real error and do not fabricate data.
 
 ## Output Guidance
 
@@ -101,6 +186,8 @@ Use when the user provides an order number and wants order information.
 - For `product-list`, prefer using `--name` when the user clearly asks about a specific product.
 - Treat price, specification, shelf life, storage method, stock, sale status, and product comparisons as `product-list` questions.
 - For `order-list`, require an order number before calling.
+- For paginated lists, ask for or choose a small page size such as 20 unless the user needs more.
+- For message-sending actions, never invent recipients or content; confirm ambiguous details first.
 - Keep the response concise unless the user asks for full details.
 
 ## Resources
@@ -108,7 +195,7 @@ Use when the user provides an order number and wants order information.
 ### `scripts/`
 
 - `scripts/fetch_metast_mcp.py`
-  Unified CLI for all three Metast MCP endpoints.
+  Unified CLI for supported Metast MCP and customer-service endpoints.
 
 ### `references/`
 

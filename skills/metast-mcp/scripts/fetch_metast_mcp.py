@@ -15,7 +15,27 @@ ENDPOINTS = {
     "product-list": "/app-api/mcp/api-mcp/productList",
     "delivery-express-list": "/app-api/mcp/api-mcp/deliveryExpressList",
     "order-list": "/app-api/mcp/api-mcp/orderList",
+    "yugao-list": "/app-api/mcp/api-mcp/yugaoList",
+    "member-user-list": "/app-api/mcp/api-mcp/memberUserList",
+    "member-user-order-list": "/app-api/mcp/api-mcp/memberUserOrderList",
+    "order-user-delivery": "/app-api/mcp/api-mcp/orderUserdelivery",
+    "im-group-list": "/system/api/im/groupList",
+    "send-chat-message": "/system/api/im/sendChatMesage",
+    "send-group-message": "/system/api/im/sendGroupMesage",
 }
+
+PAGINATED_ACTIONS = {
+    "member-user-list",
+    "member-user-order-list",
+    "im-group-list",
+}
+
+
+def require_param(action: str, params: dict[str, object], key: str, label: str) -> object:
+    value = params.get(key)
+    if value is None or value == "":
+        raise ValueError(f"{action} requires {label}")
+    return value
 
 
 def load_env_file(file_path: Path) -> None:
@@ -55,16 +75,41 @@ def load_default_env_files() -> None:
             return
 
 
-def build_url(base_url: str, action: str, order_no: str, product_name: str) -> str:
+def build_url(base_url: str, action: str, params: dict[str, object]) -> str:
     path = ENDPOINTS[action]
     url = f"{base_url.rstrip('/')}{path}"
-    query = {}
-    if action == "product-list" and product_name:
-        query["name"] = product_name
+    query: dict[str, object] = {}
+
+    if action == "product-list" and params.get("name"):
+        query["name"] = params["name"]
+
     if action == "order-list":
-        if not order_no:
-            raise ValueError("order-list requires --no ORDER_NO")
-        query["no"] = order_no
+        query["no"] = require_param(action, params, "no", "--no ORDER_NO")
+
+    if action in PAGINATED_ACTIONS:
+        query["pageNo"] = require_param(action, params, "page_no", "--page-no PAGE_NO")
+        query["pageSize"] = require_param(
+            action, params, "page_size", "--page-size PAGE_SIZE"
+        )
+
+    if action == "member-user-order-list":
+        query["userId"] = require_param(action, params, "user_id", "--user-id USER_ID")
+
+    if action == "order-user-delivery":
+        query["orderId"] = require_param(
+            action, params, "order_id", "--order-id ORDER_ID"
+        )
+
+    if action == "send-chat-message":
+        query["mobile"] = require_param(action, params, "mobile", "--mobile MOBILE")
+        query["content"] = require_param(action, params, "content", "--content CONTENT")
+
+    if action == "send-group-message":
+        query["groupId"] = require_param(
+            action, params, "group_id", "--group-id GROUP_ID"
+        )
+        query["content"] = require_param(action, params, "content", "--content CONTENT")
+
     if query:
         url = f"{url}?{urlencode(query)}"
     return url
@@ -74,11 +119,18 @@ def main() -> int:
     parser = argparse.ArgumentParser(description="Fetch data from Metast MCP endpoints.")
     parser.add_argument(
         "action",
-        choices=["product-list", "delivery-express-list", "order-list"],
+        choices=sorted(ENDPOINTS),
         help="Which endpoint to call",
     )
     parser.add_argument("--name", help="Product name filter, optional for product-list")
     parser.add_argument("--no", help="Order number, required for order-list")
+    parser.add_argument("--page-no", type=int, help="Page number for paginated endpoints")
+    parser.add_argument("--page-size", type=int, help="Page size for paginated endpoints")
+    parser.add_argument("--user-id", type=int, help="User ID for member-user-order-list")
+    parser.add_argument("--order-id", type=int, help="Order ID for order-user-delivery")
+    parser.add_argument("--mobile", help="Mobile number for send-chat-message")
+    parser.add_argument("--group-id", help="Group ID for send-group-message")
+    parser.add_argument("--content", help="Message content for send message endpoints")
     args = parser.parse_args()
 
     load_default_env_files()
@@ -92,7 +144,21 @@ def main() -> int:
         return 1
 
     try:
-        url = build_url(base_url, args.action, args.no or "", args.name or "")
+        url = build_url(
+            base_url,
+            args.action,
+            {
+                "name": args.name or "",
+                "no": args.no or "",
+                "page_no": args.page_no,
+                "page_size": args.page_size,
+                "user_id": args.user_id,
+                "order_id": args.order_id,
+                "mobile": args.mobile or "",
+                "group_id": args.group_id or "",
+                "content": args.content or "",
+            },
+        )
     except ValueError as error:
         print(str(error), file=sys.stderr)
         return 1

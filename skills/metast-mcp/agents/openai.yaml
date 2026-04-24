@@ -1,4 +1,4 @@
 interface:
   display_name: "Metast MCP"
-  short_description: "Fetch products, couriers, and orders from Metast MCP"
-  default_prompt: "Use $metast-mcp to fetch product, courier, or order data from the Metast MCP APIs."
+  short_description: "Fetch Metast data and send service messages"
+  default_prompt: "Use $metast-mcp to fetch Metast customer-service data or send a confirmed service message."
