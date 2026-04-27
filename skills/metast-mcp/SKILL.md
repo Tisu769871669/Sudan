@@ -194,7 +194,6 @@ python3 scripts/fetch_metast_mcp.py send-group-message --group-id GROUP_ID --con
 
 - `references/api.md`：接口路径、参数和凭证约定。
 
-### 项目文档
+### 维护记录
 
-- `docs/API_REFERENCE.md`：面向维护者的 API 表格。
-- `docs/AUTOMATION_WORKFLOW.md`：每日自动化任务、测试和 cron 配置。
+- `internal-maintenance/`：本地维护记录目录，已加入 `.gitignore`，用于记录 API 联调、自动化流程、当前功能和未完成功能。

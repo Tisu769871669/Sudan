@@ -4,11 +4,9 @@
 
 ## 文档入口
 
-- `MAINTENANCE.md`：项目整体维护文档，包含架构、部署、排障、安全和技术债。
-- `docs/API_REFERENCE.md`：苏丹客服自动化依赖的 Metast MCP API 表格文档。
-- `docs/AUTOMATION_WORKFLOW.md`：每日客服自动化流程、测试方法和 cron 定时任务配置。
+- `internal-maintenance/`：我们自己看的维护记录目录，已加入 `.gitignore`，用于记录开发过程、当前功能、未完成功能、API 联调和自动化流程。
 - `node-services/agent-bridge/README.md`：HTTP Bridge 接口协议说明。
-- `AGENT_BUILD_PLAYBOOK.md`：复刻新业务 agent 的步骤手册。
+- `skills/metast-mcp/SKILL.md`：Metast MCP 实时业务能力说明，会随 skill 一起安装到 OpenClaw workspace。
 
 ## 目录结构
 

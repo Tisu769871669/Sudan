@@ -5,6 +5,7 @@ __pycache__/
 ~$*.docx
 .omx/
 .automation-state/
+internal-maintenance/
 问题.txt
 node-services/agent-bridge/.env
 node-services/agent-bridge/*.log
