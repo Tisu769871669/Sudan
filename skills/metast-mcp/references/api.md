@@ -62,7 +62,9 @@ Credential loading order:
 - Query params:
   - `pageNo`: page number
   - `pageSize`: page size
-  - `userId`: user ID
+  - `mobile`: member mobile number
+  - `status`: order status
+  - `userId`: optional user ID
 
 ## 7. Order User Delivery
 

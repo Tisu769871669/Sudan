@@ -89,24 +89,61 @@ class BuildUrlTest(unittest.TestCase):
         )
         self.assertEqual(self.query_for(url), {"pageNo": ["2"], "pageSize": ["50"]})
 
-    def test_member_user_order_list_requires_user_id(self) -> None:
-        with self.assertRaisesRegex(ValueError, "--user-id USER_ID"):
+    def test_member_user_order_list_requires_mobile(self) -> None:
+        with self.assertRaisesRegex(ValueError, "--mobile MOBILE"):
             fetch_metast_mcp.build_url(
                 "https://example.invalid",
                 "member-user-order-list",
-                {"page_no": 1, "page_size": 20},
+                {"page_no": 1, "page_size": 20, "status": 1},
             )
 
-    def test_member_user_order_list_uses_user_id_and_page_params(self) -> None:
+    def test_member_user_order_list_requires_status(self) -> None:
+        with self.assertRaisesRegex(ValueError, "--status STATUS"):
+            fetch_metast_mcp.build_url(
+                "https://example.invalid",
+                "member-user-order-list",
+                {"page_no": 1, "page_size": 20, "mobile": "13800000000"},
+            )
+
+    def test_member_user_order_list_uses_mobile_status_and_page_params(self) -> None:
         url = fetch_metast_mcp.build_url(
             "https://example.invalid",
             "member-user-order-list",
-            {"page_no": 1, "page_size": 20, "user_id": 123},
+            {"page_no": 1, "page_size": 20, "mobile": "13800000000", "status": 2},
         )
 
         self.assertEqual(
             self.query_for(url),
-            {"pageNo": ["1"], "pageSize": ["20"], "userId": ["123"]},
+            {
+                "pageNo": ["1"],
+                "pageSize": ["20"],
+                "mobile": ["13800000000"],
+                "status": ["2"],
+            },
+        )
+
+    def test_member_user_order_list_keeps_optional_user_id(self) -> None:
+        url = fetch_metast_mcp.build_url(
+            "https://example.invalid",
+            "member-user-order-list",
+            {
+                "page_no": 1,
+                "page_size": 20,
+                "mobile": "13800000000",
+                "status": 2,
+                "user_id": 123,
+            },
+        )
+
+        self.assertEqual(
+            self.query_for(url),
+            {
+                "pageNo": ["1"],
+                "pageSize": ["20"],
+                "userId": ["123"],
+                "mobile": ["13800000000"],
+                "status": ["2"],
+            },
         )
 
     def test_order_user_delivery_requires_order_id(self) -> None:

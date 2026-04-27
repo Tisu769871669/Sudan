@@ -41,7 +41,7 @@ python3 scripts/fetch_metast_mcp.py delivery-express-list
 python3 scripts/fetch_metast_mcp.py order-list --no ORDER_NO
 python3 scripts/fetch_metast_mcp.py yugao-list
 python3 scripts/fetch_metast_mcp.py member-user-list --page-no 1 --page-size 20
-python3 scripts/fetch_metast_mcp.py member-user-order-list --page-no 1 --page-size 20 --user-id USER_ID
+python3 scripts/fetch_metast_mcp.py member-user-order-list --page-no 1 --page-size 20 --mobile MOBILE --status STATUS
 python3 scripts/fetch_metast_mcp.py order-user-delivery --order-id ORDER_ID
 python3 scripts/fetch_metast_mcp.py im-group-list --page-no 1 --page-size 20
 python3 scripts/fetch_metast_mcp.py send-chat-message --mobile MOBILE --content "消息内容"
@@ -119,7 +119,7 @@ Use when customer service needs paginated member/user information.
 Use:
 
 ```bash
-python3 scripts/fetch_metast_mcp.py member-user-order-list --page-no 1 --page-size 20 --user-id USER_ID
+python3 scripts/fetch_metast_mcp.py member-user-order-list --page-no 1 --page-size 20 --mobile MOBILE --status STATUS
 ```
 
 Use when customer service needs a specific user's paginated order list.

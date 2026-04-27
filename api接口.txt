@@ -61,7 +61,9 @@ curl -sS -G "https://lx.metast.cn/app-api/mcp/api-mcp/memberUserList" \
 - 参数：
   - `pageNo`：Integer，页码，必填
   - `pageSize`：Integer，每页数量，必填
-  - `userId`：Long，用户 ID，必填
+  - `mobile`：String，用户手机号，必填
+  - `status`：Integer，订单状态，必填
+  - `userId`：Long，用户 ID，可选
 
 ### 4. 获得订单物流
 

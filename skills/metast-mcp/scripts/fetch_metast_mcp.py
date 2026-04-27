@@ -93,7 +93,10 @@ def build_url(base_url: str, action: str, params: dict[str, object]) -> str:
         )
 
     if action == "member-user-order-list":
-        query["userId"] = require_param(action, params, "user_id", "--user-id USER_ID")
+        if params.get("user_id") not in (None, ""):
+            query["userId"] = params["user_id"]
+        query["mobile"] = require_param(action, params, "mobile", "--mobile MOBILE")
+        query["status"] = require_param(action, params, "status", "--status STATUS")
 
     if action == "order-user-delivery":
         query["orderId"] = require_param(
@@ -127,6 +130,7 @@ def main() -> int:
     parser.add_argument("--page-no", type=int, help="Page number for paginated endpoints")
     parser.add_argument("--page-size", type=int, help="Page size for paginated endpoints")
     parser.add_argument("--user-id", type=int, help="User ID for member-user-order-list")
+    parser.add_argument("--status", type=int, help="Order status for member-user-order-list")
     parser.add_argument("--order-id", type=int, help="Order ID for order-user-delivery")
     parser.add_argument("--mobile", help="Mobile number for send-chat-message")
     parser.add_argument("--group-id", help="Group ID for send-group-message")
@@ -153,6 +157,7 @@ def main() -> int:
                 "page_no": args.page_no,
                 "page_size": args.page_size,
                 "user_id": args.user_id,
+                "status": args.status,
                 "order_id": args.order_id,
                 "mobile": args.mobile or "",
                 "group_id": args.group_id or "",

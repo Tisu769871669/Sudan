@@ -2,7 +2,9 @@
 __pycache__/
 *.pyc
 *.bak.*
+~$*.docx
 .omx/
+.automation-state/
 问题.txt
 node-services/agent-bridge/.env
 node-services/agent-bridge/*.log

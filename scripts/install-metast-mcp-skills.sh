@@ -30,6 +30,6 @@ echo "  python3 \$HOME/.openclaw/workspace/skills/metast-mcp/scripts/fetch_metas
 echo "  python3 \$HOME/.openclaw/workspace/skills/metast-mcp/scripts/fetch_metast_mcp.py order-list --no ORDER_NO"
 echo "  python3 \$HOME/.openclaw/workspace/skills/metast-mcp/scripts/fetch_metast_mcp.py yugao-list"
 echo "  python3 \$HOME/.openclaw/workspace/skills/metast-mcp/scripts/fetch_metast_mcp.py member-user-list --page-no 1 --page-size 20"
-echo "  python3 \$HOME/.openclaw/workspace/skills/metast-mcp/scripts/fetch_metast_mcp.py member-user-order-list --page-no 1 --page-size 20 --user-id USER_ID"
+echo "  python3 \$HOME/.openclaw/workspace/skills/metast-mcp/scripts/fetch_metast_mcp.py member-user-order-list --page-no 1 --page-size 20 --mobile MOBILE --status STATUS"
 echo "  python3 \$HOME/.openclaw/workspace/skills/metast-mcp/scripts/fetch_metast_mcp.py order-user-delivery --order-id ORDER_ID"
 echo "  python3 \$HOME/.openclaw/workspace/skills/metast-mcp/scripts/fetch_metast_mcp.py im-group-list --page-no 1 --page-size 20"
