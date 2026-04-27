@@ -198,13 +198,13 @@ def group_targets(client: ApiClient, limit: int | None, page_size: int) -> list[
     )
     return [
         {
-            "id": str(item.get("gid") or item.get("id") or ""),
-            "internalId": str(item.get("id") or ""),
+            "id": str(item.get("id") or ""),
+            "gid": str(item.get("gid") or ""),
             "name": str(item.get("name") or item.get("corpName") or ""),
             "raw": item,
         }
         for item in groups
-        if item.get("id") or item.get("gid")
+        if item.get("id")
     ]
 
 
@@ -323,6 +323,7 @@ def execute_group_plan(client: ApiClient, targets: list[dict[str, Any]], content
     for target in targets:
         row = {
             "groupId": target["id"],
+            "gid": target.get("gid", ""),
             "groupName": target["name"],
             "content": content,
             "executed": execute,

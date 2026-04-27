@@ -94,5 +94,5 @@ Credential loading order:
 - Method: `GET`
 - Path: `/prod-api/system/api/im/sendGroupMesage`
 - Query params:
-  - `groupId`: group chat ID
+  - `groupId`: numeric `id` from `/prod-api/system/api/im/groupList`, not the `gid` chatroom value
   - `content`: message content

@@ -13,9 +13,9 @@
 | 会员列表 | `member-user-list` | `GET` | `/app-api/mcp/api-mcp/memberUserList` | `pageNo`、`pageSize` | 无 | 私发早安问候、活动通知、订单轮询对象来源 | 返回手机号 `mobile`、姓名/昵称、会员分组、用户 ID 等 |
 | 用户订单分页 | `member-user-order-list` | `GET` | `/app-api/mcp/api-mcp/memberUserOrderList` | `pageNo`、`pageSize`、`mobile`、`status` | `userId` | 主动轮询订单状态、准备物流/收货通知 | 实测需要 `mobile` 和 `status`；旧文档只写 `userId` 不够 |
 | 订单物流详情 | `order-user-delivery` | `GET` | `/app-api/mcp/api-mcp/orderUserdelivery` | `orderId` | 无 | 查询单个订单物流详情 | 需要先从订单接口拿到订单 ID |
-| IM 群列表 | `im-group-list` | `GET` | `/prod-api/system/api/im/groupList` | `pageNo`、`pageSize` | 无 | 群发目标来源 | 返回里有 `id` 和 `gid`；发送群消息优先使用 `gid`，内部排查可看 `id` |
+| IM 群列表 | `im-group-list` | `GET` | `/prod-api/system/api/im/groupList` | `pageNo`、`pageSize` | 无 | 群发目标来源 | 返回里有 `id` 和 `gid`；发送群消息必须使用数字 `id`，`gid` 是微信 chatroom 标识，只用于排查 |
 | 发送单人消息 | `send-chat-message` | `GET` | `/prod-api/system/api/im/sendChatMesage` | `mobile`、`content` | 无 | 私发早安问候、活动通知、订单/物流提醒 | 会真实发送，自动化脚本默认 dry-run，必须显式 `--execute` |
-| 发送群消息 | `send-group-message` | `GET` | `/prod-api/system/api/im/sendGroupMesage` | `groupId`、`content` | 无 | 蔬菜推送、直播提醒、活动群提醒 | 会真实发送；`groupId` 应使用 IM 群列表里的真实群标识，不能用会员分组 `groupId` |
+| 发送群消息 | `send-group-message` | `GET` | `/prod-api/system/api/im/sendGroupMesage` | `groupId`、`content` | 无 | 蔬菜推送、直播提醒、活动群提醒 | 会真实发送；`groupId` 必须使用 IM 群列表返回的数字 `id`，不能用 `gid` 或会员分组 `groupId` |
 
 ## 自动化任务覆盖表
 
