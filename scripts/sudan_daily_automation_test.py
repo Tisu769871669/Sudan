@@ -49,5 +49,21 @@ class GroupTargetTest(unittest.TestCase):
         self.assertEqual(targets[0]["gid"], "53220657641@chatroom")
 
 
+class ExplicitMemberTargetTest(unittest.TestCase):
+    def test_explicit_member_targets_use_only_requested_mobiles(self) -> None:
+        targets = sudan_daily_automation.explicit_member_targets(
+            ["18256819124", " 13002527669 "],
+            "18256819124,,",
+        )
+
+        self.assertEqual(
+            targets,
+            [
+                {"mobile": "18256819124", "name": "", "userId": None, "raw": {"mobile": "18256819124"}},
+                {"mobile": "13002527669", "name": "", "userId": None, "raw": {"mobile": "13002527669"}},
+            ],
+        )
+
+
 if __name__ == "__main__":
     unittest.main()

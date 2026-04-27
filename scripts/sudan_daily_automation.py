@@ -227,6 +227,30 @@ def member_targets(client: ApiClient, limit: int | None, page_size: int) -> list
     ]
 
 
+def explicit_member_targets(mobiles: list[str] | None, mobile_csv: str | None) -> list[dict[str, Any]]:
+    values: list[str] = []
+    values.extend(mobiles or [])
+    if mobile_csv:
+        values.extend(mobile_csv.split(","))
+
+    result = []
+    seen = set()
+    for value in values:
+        mobile = str(value).strip()
+        if not mobile or mobile in seen:
+            continue
+        seen.add(mobile)
+        result.append(
+            {
+                "mobile": mobile,
+                "name": "",
+                "userId": None,
+                "raw": {"mobile": mobile},
+            }
+        )
+    return result
+
+
 def money(value: Any) -> str:
     try:
         cents = int(value)
@@ -394,7 +418,7 @@ def command_live_reminder(args: argparse.Namespace) -> None:
 def command_private_greeting(args: argparse.Namespace) -> None:
     client = create_client()
     content = build_private_greeting(args)
-    targets = member_targets(client, args.member_limit, args.page_size)
+    targets = explicit_member_targets(args.mobile, args.mobiles) or member_targets(client, args.member_limit, args.page_size)
     emit_plan(
         {
             "task": "private-greeting",
@@ -549,6 +573,8 @@ def build_parser() -> argparse.ArgumentParser:
     greeting = subparsers.add_parser("private-greeting", help="Build/send private morning greetings.")
     add_common_send_flags(greeting)
     greeting.add_argument("--member-limit", type=int, default=10, help="Limit target members. Use 0 for all members.")
+    greeting.add_argument("--mobile", action="append", help="Exact mobile target. Can be used multiple times.")
+    greeting.add_argument("--mobiles", help="Comma separated exact mobile targets.")
     greeting.add_argument("--weather-text", help="Weather text from OpenClaw search or external source.")
     greeting.add_argument("--holiday-text", help="Holiday/solar-term text from OpenClaw search or external source.")
     greeting.add_argument("--content", help="Exact message content.")
