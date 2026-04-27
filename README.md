@@ -1,6 +1,14 @@
-# Sudan OpenClaw Persona Project
+# 苏丹 OpenClaw 客服 Agent 项目
 
 这个仓库用于维护“苏丹”专属客服在 OpenClaw 中的可部署人格配置，以及后续可导入的 FAQ 知识包。
+
+## 文档入口
+
+- `MAINTENANCE.md`：项目整体维护文档，包含架构、部署、排障、安全和技术债。
+- `docs/API_REFERENCE.md`：苏丹客服自动化依赖的 Metast MCP API 表格文档。
+- `docs/AUTOMATION_WORKFLOW.md`：每日客服自动化流程、测试方法和 cron 定时任务配置。
+- `node-services/agent-bridge/README.md`：HTTP Bridge 接口协议说明。
+- `AGENT_BUILD_PLAYBOOK.md`：复刻新业务 agent 的步骤手册。
 
 ## 目录结构
 
@@ -15,6 +23,7 @@
 - `scripts/apply-openclaw-persona.sh`：生成 prompt、定位 OpenClaw 配置、备份、覆盖、校验并重启。
 - `scripts/install-openclaw-service.sh`：当 OpenClaw 自带 `gateway install` 失效时，安装 systemd 兜底服务。
 - `scripts/install-agent-bridge-service.sh`：把 `node-services/agent-bridge` 安装成 systemd 服务。
+- `scripts/sudan_daily_automation.py`：苏丹客服每日自动化脚本，默认 dry-run，显式 `--execute` 才真实发送。
 - `scripts/push-to-github.sh`：本地初始化 Git、提交并推送到 GitHub。
 
 ## 本地生成最终 prompt

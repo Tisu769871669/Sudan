@@ -1,4 +1,4 @@
-# Sudan Agent Bridge
+# 苏丹 Agent Bridge
 
 这个服务负责把第三方 HTTP `POST` 请求桥接到 OpenClaw agent，并对外保持统一协议。
 
@@ -7,31 +7,27 @@
 - `POST /api/agents/chat`
 - `POST /api/agents/<agentId>/chat`
 
-## 风格来源
+## 职责边界
 
 推荐线上组合方式：
 
-- `bridge` 保留
-- `knowledge/faq.json` 保留
-- `sudan` 同事蒸馏 skill 作为主要人格来源
+- OpenClaw workspace 负责人格、风格、规则和已安装的 `metast-mcp` skill。
+- `knowledge/faq.json` 负责稳定 FAQ 检索。
+- `bridge` 负责协议、鉴权、会话队列、防抖、FAQ 命中和调用 OpenClaw。
 
-当前 bridge 支持：
-
-- 优先读取 `COLLEAGUE_SKILL_FILE`
-- 如果该文件不存在，再回退到 `SYSTEM_PROMPT_FILE`
-
-推荐 `.env` 增加：
+当前 bridge 不再把完整人格或完整 colleague skill 注入到每轮消息里，避免 prompt 冗余和行为污染。`.env` 中仍可保留下面两个路径，主要用于健康检查和排障展示：
 
 ```env
 COLLEAGUE_SKILL_FILE=~/.openclaw/workspace/skills/colleagues/sudan/SKILL.md
 SYSTEM_PROMPT_FILE=../../build/generated/system_prompt.md
 ```
 
-这样可以做到：
+维护时按这个分工理解：
 
-- `COLLEAGUE_SKILL_FILE` 负责“怎么说”
+- OpenClaw workspace 负责“怎么说”
 - `KNOWLEDGE_FILE` 负责“说什么不能错”
-- `bridge` 继续负责协议、鉴权、上下文和错误码
+- `metast-mcp` 负责实时商品、订单、快递、直播预告、会员和 IM 动作
+- `bridge` 继续负责协议、鉴权、上下文、防抖和错误码
 
 ## 请求头
 
@@ -148,8 +144,8 @@ Content-Type: application/json; charset=utf-8
 - 类型：`string`
 - 说明：当前调用的 agent，例如：
   - `main`
-  - `snowchuang`
-  - `yixiang`
+  - `sudan`
+  - `youragent`
 
 ### `conversation_id`
 
@@ -171,8 +167,8 @@ Content-Type: application/json; charset=utf-8
 - 类型：`string`
 - 说明：服务内部生成的会话 ID，例如：
   - `bridge_main_session_001`
-  - `bridge_snowchuang_session_001`
-  - `bridge_yixiang_session_001`
+  - `bridge_sudan_session_001`
+  - `bridge_youragent_session_001`
 
 ### `trace_id`
 

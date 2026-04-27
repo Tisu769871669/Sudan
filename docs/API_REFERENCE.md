@@ -2,6 +2,8 @@
 
 本文档用于维护苏丹客服自动化流程所需的 API 能力。所有 Metast MCP 接口默认 Base URL 为 `https://lx.metast.cn`，请求头需要 `mcpKey`、`mcpSecret`、`Accept: application/json`。
 
+相关流程、测试命令和 cron 配置请看 `docs/AUTOMATION_WORKFLOW.md`。
+
 ## Metast MCP 接口
 
 | 能力 | Action | Method | Path | 必填参数 | 可选参数 | 自动化用途 | 注意事项 |

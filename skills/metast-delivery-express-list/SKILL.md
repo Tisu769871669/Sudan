@@ -1,51 +1,40 @@
 ---
 name: metast-delivery-express-list
-description: Fetch the courier company list from the Metast MCP API. Use when the agent needs the live delivery express options from `https://lx.metast.cn/app-api/mcp/api-mcp/deliveryExpressList` with `mcpKey` and `mcpSecret` headers.
+description: 早期拆分的 Metast 快递公司列表查询 skill。当前线上建议优先使用统一的 `metast-mcp` skill；只有旧 agent 仍依赖本目录时才使用。
 ---
 
-# Metast Delivery Express List
+# Metast 快递公司列表查询
 
-Use this skill when the agent needs the latest courier company list from the Metast MCP API.
+这是早期拆分出来的快递公司列表 skill。当前项目已经收敛到 `skills/metast-mcp/`，线上维护时优先安装和使用 `metast-mcp`。
 
-## Quick Start
+如果旧 agent 仍然只安装了本 skill，可以继续用它查询可用快递公司。
 
-Ensure these environment variables are set:
+## 准备凭证
+
+需要环境变量：
 
 - `METAST_MCP_BASE_URL`
 - `METAST_MCP_KEY`
 - `METAST_MCP_SECRET`
 
-Run:
+## 使用方式
 
 ```bash
 python3 scripts/fetch_delivery_express_list.py
 ```
 
-## Workflow
+## 适用场景
 
-1. Call the API with a `GET` request.
-2. Pass `mcpKey` and `mcpSecret` in the request headers.
-3. Parse the JSON response.
-4. Extract useful fields such as:
-   - express company name
-   - express company code
-   - enabled or default status
-5. Summarize the available companies unless the user explicitly asks for raw data.
+- 用户问支持哪些快递。
+- 客服需要查询快递公司名称或编码。
 
-## Output Guidance
+## 输出要求
 
-- When the user asks "which express companies are available", return a concise list.
-- When the user asks for exact codes or defaults, include those returned fields.
-- If the API fails, return the real error and do not fabricate courier data.
+- 用户泛问时，用中文简要列出可用快递。
+- 用户问编码或默认状态时，返回接口里的具体字段。
+- API 失败时报告真实错误，不要编造快递数据。
 
-## Resources
+## 维护建议
 
-### `scripts/`
-
-- `scripts/fetch_delivery_express_list.py`
-  Perform the authenticated `GET` call and print formatted JSON.
-
-### `references/`
-
-- `references/api.md`
-  Endpoint contract and required environment variables.
+- 新功能不要继续加到本 skill，统一加到 `skills/metast-mcp/`。
+- `references/api.md` 只保留旧 skill 的接口说明。
