@@ -2,9 +2,12 @@
 from __future__ import annotations
 
 import argparse
+import glob
 import json
 import os
 import re
+import shutil
+import subprocess
 import sys
 import time
 from dataclasses import dataclass
@@ -23,6 +26,9 @@ STATE_DIR = ROOT_DIR / ".automation-state"
 DEFAULT_BASE_URL = "https://lx.metast.cn"
 DEFAULT_PAGE_SIZE = 20
 CHINA_TZ = ZoneInfo("Asia/Shanghai")
+DEFAULT_COPYWRITER_AGENT_ID = "sudan-main"
+DEFAULT_COPYWRITER_TIMEOUT_SECONDS = 90
+COPY_BLOCKED_TERMS = ["治愈", "根治", "保证有效", "替代医生", "包治", "立刻见效"]
 
 
 ENDPOINTS = {
@@ -77,6 +83,15 @@ class ApiClient:
             return json.loads(raw)
         except json.JSONDecodeError as error:
             raise RuntimeError(f"{action} returned non-JSON payload: {raw[:200]}") from error
+
+
+@dataclass
+class CopyRequest:
+    task: str
+    channel: str
+    fallback: str
+    context: dict[str, Any]
+    tone: str = "贴心、自然、克制的养生顾问"
 
 
 def load_env_file(file_path: Path) -> None:
@@ -149,6 +164,136 @@ def data_total(payload: dict[str, Any]) -> int | None:
     if isinstance(data, dict) and isinstance(data.get("total"), int):
         return data["total"]
     return None
+
+
+def parse_agent_copy_output(raw: str) -> dict[str, Any]:
+    text = str(raw or "").strip()
+    text = re.sub(r"^```(?:json)?\s*", "", text, flags=re.IGNORECASE)
+    text = re.sub(r"\s*```$", "", text)
+    decoder = json.JSONDecoder()
+    for match in re.finditer(r"\{", text):
+        try:
+            payload, _ = decoder.raw_decode(text[match.start() :])
+        except json.JSONDecodeError:
+            continue
+        if isinstance(payload, dict):
+            return payload
+    raise ValueError("agent copy output did not contain a JSON object")
+
+
+def validate_generated_copy(content: str) -> None:
+    text = str(content or "").strip()
+    if not text:
+        raise ValueError("generated copy is empty")
+    for term in COPY_BLOCKED_TERMS:
+        if term in text:
+            raise ValueError(f"generated copy contains blocked term: {term}")
+
+
+def build_copy_prompt(request: CopyRequest) -> str:
+    return "\n".join(
+        [
+            "你是苏丹老师私域客服的文案助手，只负责生成可直接发送的中文文案。",
+            "请根据任务上下文输出 JSON，禁止输出 Markdown、解释或多余文字。",
+            "",
+            "输出 JSON 格式：",
+            '{"content":"可直接发送的文案","riskLevel":"low","sendChannel":"group|private","reason":"一句话说明"}',
+            "",
+            "硬性规则：",
+            "- 语气亲切自然，可以适度使用小表情，但不要刷屏。",
+            "- 大健康内容只能写日常养护建议，不能写医疗诊断或疗效承诺。",
+            "- 禁止使用：治愈、根治、保证有效、替代医生、包治、立刻见效。",
+            "- 如果是非卖货直播提醒，只写群发口径，不要写私发重点客户。",
+            "- 如果信息不足，生成稳妥提醒，不要编造直播链接、价格、福利或医疗功效。",
+            "",
+            f"任务：{request.task}",
+            f"发送渠道：{request.channel}",
+            f"语气定位：{request.tone}",
+            "上下文：",
+            json.dumps(request.context, ensure_ascii=False, indent=2),
+        ]
+    )
+
+
+def generate_agent_copy(
+    request: CopyRequest,
+    *,
+    runner: Any | None = None,
+    agent_id: str | None = None,
+    timeout_seconds: int | None = None,
+) -> tuple[str, dict[str, Any]]:
+    try:
+        prompt = build_copy_prompt(request)
+        raw = runner(prompt) if runner else run_copywriter_agent(prompt, agent_id=agent_id, timeout_seconds=timeout_seconds)
+        payload = parse_agent_copy_output(raw)
+        content = str(payload.get("content") or "").strip()
+        validate_generated_copy(content)
+        send_channel = str(payload.get("sendChannel") or request.channel).strip() or request.channel
+        return content, {
+            "fallbackUsed": False,
+            "riskLevel": str(payload.get("riskLevel") or ""),
+            "sendChannel": send_channel,
+            "reason": str(payload.get("reason") or ""),
+        }
+    except Exception as error:
+        return request.fallback, {
+            "fallbackUsed": True,
+            "fallbackReason": str(error)[:240],
+            "sendChannel": request.channel,
+        }
+
+
+def run_copywriter_agent(prompt: str, *, agent_id: str | None = None, timeout_seconds: int | None = None) -> str:
+    resolved_agent_id = agent_id or os.environ.get("SUDAN_COPYWRITER_AGENT_ID") or DEFAULT_COPYWRITER_AGENT_ID
+    resolved_timeout = int(timeout_seconds or os.environ.get("SUDAN_COPYWRITER_TIMEOUT_SECONDS") or DEFAULT_COPYWRITER_TIMEOUT_SECONDS)
+    openclaw_bin = resolve_openclaw_bin(os.environ.get("SUDAN_COPYWRITER_OPENCLAW_BIN") or os.environ.get("OPENCLAW_BIN") or "openclaw")
+    session_id = f"sudan_copywriter_{datetime.now(CHINA_TZ).strftime('%Y%m%d')}"
+    args = [
+        openclaw_bin,
+        "agent",
+        "--agent",
+        resolved_agent_id,
+        "--session-id",
+        session_id,
+        "--message",
+        prompt,
+        "--timeout",
+        str(resolved_timeout),
+    ]
+    if os.environ.get("SUDAN_COPYWRITER_FORCE_LOCAL") == "1" or os.environ.get("OPENCLAW_FORCE_LOCAL") == "1":
+        args.append("--local")
+    env = {
+        **os.environ,
+        "OPENCLAW_HIDE_BANNER": "1",
+        "OPENCLAW_SUPPRESS_NOTES": "1",
+        "NO_COLOR": "1",
+    }
+    completed = subprocess.run(
+        args,
+        cwd=ROOT_DIR,
+        env=env,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        timeout=resolved_timeout + 20,
+        check=False,
+    )
+    if completed.returncode != 0:
+        detail = (completed.stderr or completed.stdout).strip()
+        raise RuntimeError(f"copywriter agent failed with code {completed.returncode}: {detail[:300]}")
+    return "\n".join(part for part in [completed.stdout, completed.stderr] if part)
+
+
+def resolve_openclaw_bin(value: str) -> str:
+    if os.path.isabs(value) or os.sep in value or (os.altsep and os.altsep in value):
+        return value
+    found = shutil.which(value)
+    if found:
+        return found
+    candidates = sorted(glob.glob("/root/.nvm/versions/node/*/bin/openclaw"), reverse=True)
+    return candidates[0] if candidates else value
 
 
 def require_success(payload: dict[str, Any], action: str) -> None:
@@ -292,6 +437,29 @@ def build_vegetable_message(products: list[dict[str, Any]]) -> str:
     return "\n".join(lines)
 
 
+def build_vegetable_content(
+    products: list[dict[str, Any]],
+    *,
+    copy_mode: str = "template",
+    copy_runner: Any | None = None,
+    agent_id: str | None = None,
+    timeout_seconds: int | None = None,
+) -> tuple[str, dict[str, Any]]:
+    fallback = build_vegetable_message(products)
+    if copy_mode != "agent":
+        return fallback, {"fallbackUsed": False, "copyMode": "template", "sendChannel": "group"}
+    context = {
+        "products": [product_summary(item) for item in products[:8]],
+        "requirement": "生成每日蔬菜群推送，结合季节和日常养生需求，给简单烹饪建议，避免夸大功效。",
+    }
+    return generate_agent_copy(
+        CopyRequest(task="vegetable-push", channel="group", fallback=fallback, context=context),
+        runner=copy_runner,
+        agent_id=agent_id,
+        timeout_seconds=timeout_seconds,
+    )
+
+
 def format_open_time(value: Any) -> str:
     try:
         timestamp = int(value) / 1000
@@ -300,13 +468,30 @@ def format_open_time(value: Any) -> str:
     return datetime.fromtimestamp(timestamp, CHINA_TZ).strftime("%m月%d日 %H:%M")
 
 
-def build_live_message(previews: list[dict[str, Any]], phase: str) -> str:
+def build_live_message(previews: list[dict[str, Any]], phase: str, sale_mode: str = "auto") -> str:
     preview = previews[0] if previews else {}
     title = str(preview.get("title") or "今晚直播").strip()
     name = str(preview.get("name") or "").strip()
     open_time = format_open_time(preview.get("openTime"))
     time_text = f"，时间是 {open_time}" if open_time else ""
     owner_text = f"{name} " if name else ""
+    if sale_mode == "non-sale":
+        return "\n".join(
+            [
+                "📣📣📣直播通知",
+                "",
+                "亲爱的家人们 🌹🌹🌹",
+                "",
+                f"🔔 {owner_text}{title}{time_text}。",
+                "今天如果不安排卖货，我们只在群里同步直播提醒，不私发打扰大家。",
+                "",
+                "🙋🙋🙋有任何问题随时联系客服苏苏/小雪/阳阳哟",
+                "",
+                "💖观看苏丹直播💖",
+                "",
+                "💖加倍健康幸福💖",
+            ]
+        )
     if phase == "final":
         return f"{owner_text}{title}{time_text}。直播马上开始，大家有空可以点进来看看。"
     if phase == "link":
@@ -314,11 +499,95 @@ def build_live_message(previews: list[dict[str, Any]], phase: str) -> str:
     return f"{owner_text}{title}{time_text}。今天有直播提醒，别错过。"
 
 
-def build_private_greeting(args: argparse.Namespace) -> str:
+def build_live_reminder_content(
+    previews: list[dict[str, Any]],
+    *,
+    phase: str,
+    sale_mode: str = "auto",
+    copy_mode: str = "template",
+    copy_runner: Any | None = None,
+    agent_id: str | None = None,
+    timeout_seconds: int | None = None,
+) -> tuple[str, dict[str, Any]]:
+    fallback = build_live_message(previews, phase, sale_mode)
+    if copy_mode != "agent":
+        return fallback, {"fallbackUsed": False, "copyMode": "template", "sendChannel": "group"}
+    preview = previews[0] if previews else {}
+    context = {
+        "phase": phase,
+        "saleMode": sale_mode,
+        "preview": preview,
+        "styleReference": "参考口吻：亲爱的家人们、直播通知、玫瑰/爱心/小人表情，亲切但不要过度刷屏。",
+        "channelRule": "直播提醒默认只发群；非卖货直播必须只发群，不写私发重点客户。",
+    }
+    content, meta = generate_agent_copy(
+        CopyRequest(task="live-reminder", channel="group", fallback=fallback, context=context),
+        runner=copy_runner,
+        agent_id=agent_id,
+        timeout_seconds=timeout_seconds,
+    )
+    meta["sendChannel"] = "group"
+    return content, meta
+
+
+def build_health_tip_message(topic: str) -> str:
+    clean_topic = str(topic or "日常养生").strip() or "日常养生"
+    return "\n".join(
+        [
+            "每日养生不缺席 🌿",
+            "",
+            f"今天和大家聊聊：{clean_topic}",
+            "",
+            "1. 饮食尽量温和规律，少一点生冷刺激，给身体留出舒服的节奏。",
+            "2. 作息别太晚，睡眠稳了，白天精神和状态都会更好。",
+            "3. 黄精熟地这类食养搭配，按平时节奏坚持就好，不要急着加量。",
+            "",
+            "大家最近更关心哪类养生小问题？可以在群里说说～",
+        ]
+    )
+
+
+def build_health_tip_content(
+    topic: str,
+    previews: list[dict[str, Any]] | None = None,
+    *,
+    copy_mode: str = "template",
+    copy_runner: Any | None = None,
+    agent_id: str | None = None,
+    timeout_seconds: int | None = None,
+) -> tuple[str, dict[str, Any]]:
+    fallback = build_health_tip_message(topic)
+    if copy_mode != "agent":
+        return fallback, {"fallbackUsed": False, "copyMode": "template", "sendChannel": "group"}
+    context = {
+        "topic": topic,
+        "recentLivePreview": (previews or [])[:2],
+        "requirement": "围绕当日或昨日直播间核心内容，生成3到5条养生小知识，并带一个互动提问。",
+    }
+    return generate_agent_copy(
+        CopyRequest(task="health-tip", channel="group", fallback=fallback, context=context),
+        runner=copy_runner,
+        agent_id=agent_id,
+        timeout_seconds=timeout_seconds,
+    )
+
+
+def infer_health_tip_topic(previews: list[dict[str, Any]], override: str | None = None) -> str:
+    if override:
+        return override.strip()
+    preview = previews[0] if previews else {}
+    for key in ("title", "name", "summary", "content"):
+        value = str(preview.get(key) or "").strip()
+        if value:
+            return value[:40]
+    return "日常养生"
+
+
+def build_private_greeting_content(args: argparse.Namespace, copy_runner: Any | None = None) -> tuple[str, dict[str, Any]]:
     if args.content:
-        return args.content
+        return args.content, {"copyMode": "manual", "sendChannel": "private"}
     if args.content_file:
-        return Path(args.content_file).read_text(encoding="utf-8").strip()
+        return Path(args.content_file).read_text(encoding="utf-8").strip(), {"copyMode": "manual-file", "sendChannel": "private"}
 
     fragments = ["早安～"]
     if args.weather_text:
@@ -327,7 +596,29 @@ def build_private_greeting(args: argparse.Namespace) -> str:
         fragments.append(args.holiday_text.strip())
     fragments.append("今天也记得照顾好自己。")
     fragments.append("黄精熟地按平时节奏坚持就好，有不舒服或疑问随时找我。")
-    return "".join(fragments)
+    fallback = "".join(fragments)
+    if getattr(args, "copy_mode", "template") != "agent":
+        return fallback, {"fallbackUsed": False, "copyMode": "template", "sendChannel": "private"}
+    return generate_agent_copy(
+        CopyRequest(
+            task="private-greeting",
+            channel="private",
+            fallback=fallback,
+            context={
+                "weatherText": getattr(args, "weather_text", "") or "",
+                "holidayText": getattr(args, "holiday_text", "") or "",
+                "requirement": "生成早安问候，结合天气/节气，轻轻提醒黄精熟地日常食养，不要过度推销。",
+            },
+        ),
+        runner=copy_runner,
+        agent_id=getattr(args, "copywriter_agent_id", None),
+        timeout_seconds=getattr(args, "copywriter_timeout_seconds", None),
+    )
+
+
+def build_private_greeting(args: argparse.Namespace, copy_runner: Any | None = None) -> str:
+    content, _meta = build_private_greeting_content(args, copy_runner)
+    return content
 
 
 def send_group(client: ApiClient, group_id: str, content: str) -> dict[str, Any]:
@@ -382,12 +673,22 @@ def command_vegetable_push(args: argparse.Namespace) -> None:
     products_payload = client.get("product-list", {"name": args.keyword})
     require_success(products_payload, "product-list")
     products = records(products_payload)
-    content = args.content or build_vegetable_message(products)
+    if args.content:
+        content = args.content
+        copy_meta = {"copyMode": "manual", "sendChannel": "group"}
+    else:
+        content, copy_meta = build_vegetable_content(
+            products,
+            copy_mode=args.copy_mode,
+            agent_id=args.copywriter_agent_id,
+            timeout_seconds=args.copywriter_timeout_seconds,
+        )
     targets = group_targets(client, args.group_limit, args.page_size)
     emit_plan(
         {
             "task": "vegetable-push",
             "mode": "execute" if args.execute else "dry-run",
+            "copy": copy_meta,
             "keyword": args.keyword,
             "productCount": len(products),
             "targetCount": len(targets),
@@ -401,13 +702,26 @@ def command_live_reminder(args: argparse.Namespace) -> None:
     payload = client.get("yugao-list")
     require_success(payload, "yugao-list")
     previews = records(payload)
-    content = args.content or build_live_message(previews, args.phase)
+    if args.content:
+        content = args.content
+        copy_meta = {"copyMode": "manual", "sendChannel": "group"}
+    else:
+        content, copy_meta = build_live_reminder_content(
+            previews,
+            phase=args.phase,
+            sale_mode=args.sale_mode,
+            copy_mode=args.copy_mode,
+            agent_id=args.copywriter_agent_id,
+            timeout_seconds=args.copywriter_timeout_seconds,
+        )
     targets = group_targets(client, args.group_limit, args.page_size)
     emit_plan(
         {
             "task": "live-reminder",
             "mode": "execute" if args.execute else "dry-run",
             "phase": args.phase,
+            "saleMode": args.sale_mode,
+            "copy": copy_meta,
             "previewCount": len(previews),
             "targetCount": len(targets),
             "messages": execute_group_plan(client, targets, content, args.execute),
@@ -415,14 +729,101 @@ def command_live_reminder(args: argparse.Namespace) -> None:
     )
 
 
+def command_health_tip(args: argparse.Namespace) -> None:
+    client = create_client()
+    payload = client.get("yugao-list")
+    require_success(payload, "yugao-list")
+    previews = records(payload)
+    topic = infer_health_tip_topic(previews, args.topic)
+    if args.content:
+        content = args.content
+        copy_meta = {"copyMode": "manual", "sendChannel": "group"}
+    else:
+        content, copy_meta = build_health_tip_content(
+            topic,
+            previews,
+            copy_mode=args.copy_mode,
+            agent_id=args.copywriter_agent_id,
+            timeout_seconds=args.copywriter_timeout_seconds,
+        )
+    targets = group_targets(client, args.group_limit, args.page_size)
+    emit_plan(
+        {
+            "task": "health-tip",
+            "mode": "execute" if args.execute else "dry-run",
+            "topic": topic,
+            "copy": copy_meta,
+            "previewCount": len(previews),
+            "targetCount": len(targets),
+            "messages": execute_group_plan(client, targets, content, args.execute),
+        }
+    )
+
+
+def command_generate_copy(args: argparse.Namespace) -> None:
+    client = create_client() if args.task in {"live-reminder", "vegetable-push", "health-tip"} else None
+    previews: list[dict[str, Any]] = []
+    products: list[dict[str, Any]] = []
+    if client and args.task in {"live-reminder", "health-tip"}:
+        payload = client.get("yugao-list")
+        require_success(payload, "yugao-list")
+        previews = records(payload)
+    if client and args.task == "vegetable-push":
+        payload = client.get("product-list", {"name": args.keyword})
+        require_success(payload, "product-list")
+        products = records(payload)
+
+    if args.task == "private-greeting":
+        greeting_args = argparse.Namespace(
+            content=None,
+            content_file=None,
+            weather_text=args.weather_text,
+            holiday_text=args.holiday_text,
+            copy_mode=args.copy_mode,
+            copywriter_agent_id=args.copywriter_agent_id,
+            copywriter_timeout_seconds=args.copywriter_timeout_seconds,
+        )
+        content, copy_meta = build_private_greeting_content(greeting_args)
+    elif args.task == "live-reminder":
+        content, copy_meta = build_live_reminder_content(
+            previews,
+            phase=args.phase,
+            sale_mode=args.sale_mode,
+            copy_mode=args.copy_mode,
+            agent_id=args.copywriter_agent_id,
+            timeout_seconds=args.copywriter_timeout_seconds,
+        )
+    elif args.task == "health-tip":
+        topic = infer_health_tip_topic(previews, args.topic)
+        content, copy_meta = build_health_tip_content(
+            topic,
+            previews,
+            copy_mode=args.copy_mode,
+            agent_id=args.copywriter_agent_id,
+            timeout_seconds=args.copywriter_timeout_seconds,
+        )
+    elif args.task == "vegetable-push":
+        content, copy_meta = build_vegetable_content(
+            products,
+            copy_mode=args.copy_mode,
+            agent_id=args.copywriter_agent_id,
+            timeout_seconds=args.copywriter_timeout_seconds,
+        )
+    else:
+        raise RuntimeError(f"unsupported copy task: {args.task}")
+
+    emit_plan({"task": "generate-copy", "copyTask": args.task, "copy": copy_meta, "content": content})
+
+
 def command_private_greeting(args: argparse.Namespace) -> None:
     client = create_client()
-    content = build_private_greeting(args)
+    content, copy_meta = build_private_greeting_content(args)
     targets = explicit_member_targets(args.mobile, args.mobiles) or member_targets(client, args.member_limit, args.page_size)
     emit_plan(
         {
             "task": "private-greeting",
             "mode": "execute" if args.execute else "dry-run",
+            "copy": copy_meta,
             "targetCount": len(targets),
             "messages": execute_member_plan(client, targets, content, args.execute),
         }
@@ -548,6 +949,25 @@ def add_common_send_flags(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--page-size", type=int, default=DEFAULT_PAGE_SIZE)
 
 
+def add_copywriter_flags(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument(
+        "--copy-mode",
+        choices=["template", "agent"],
+        default=os.environ.get("SUDAN_COPY_MODE", "template"),
+        help="Use fixed templates or ask the local OpenClaw agent to generate copy.",
+    )
+    parser.add_argument(
+        "--copywriter-agent-id",
+        default=os.environ.get("SUDAN_COPYWRITER_AGENT_ID", DEFAULT_COPYWRITER_AGENT_ID),
+        help="OpenClaw agent id used when --copy-mode agent.",
+    )
+    parser.add_argument(
+        "--copywriter-timeout-seconds",
+        type=int,
+        default=int(os.environ.get("SUDAN_COPYWRITER_TIMEOUT_SECONDS", DEFAULT_COPYWRITER_TIMEOUT_SECONDS)),
+    )
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Sudan customer-service daily automation helper.")
     subparsers = parser.add_subparsers(dest="command", required=True)
@@ -558,6 +978,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     vegetable = subparsers.add_parser("vegetable-push", help="Build/send daily vegetable group push.")
     add_common_send_flags(vegetable)
+    add_copywriter_flags(vegetable)
     vegetable.add_argument("--keyword", default="蔬菜")
     vegetable.add_argument("--group-limit", type=int, default=3, help="Limit target groups. Use 0 for all groups.")
     vegetable.add_argument("--content", help="Override generated message content.")
@@ -565,13 +986,24 @@ def build_parser() -> argparse.ArgumentParser:
 
     live = subparsers.add_parser("live-reminder", help="Build/send live preview group reminder.")
     add_common_send_flags(live)
+    add_copywriter_flags(live)
     live.add_argument("--phase", choices=["pre", "final", "link"], default="pre")
+    live.add_argument("--sale-mode", choices=["auto", "sale", "non-sale"], default="auto")
     live.add_argument("--group-limit", type=int, default=3, help="Limit target groups. Use 0 for all groups.")
     live.add_argument("--content", help="Override generated message content.")
     live.set_defaults(func=lambda args: normalize_limits(args, "group_limit", command_live_reminder))
 
+    health_tip = subparsers.add_parser("health-tip", help="Build/send a group health tip around live content.")
+    add_common_send_flags(health_tip)
+    add_copywriter_flags(health_tip)
+    health_tip.add_argument("--topic", help="Override the health tip topic.")
+    health_tip.add_argument("--group-limit", type=int, default=3, help="Limit target groups. Use 0 for all groups.")
+    health_tip.add_argument("--content", help="Override generated message content.")
+    health_tip.set_defaults(func=lambda args: normalize_limits(args, "group_limit", command_health_tip))
+
     greeting = subparsers.add_parser("private-greeting", help="Build/send private morning greetings.")
     add_common_send_flags(greeting)
+    add_copywriter_flags(greeting)
     greeting.add_argument("--member-limit", type=int, default=10, help="Limit target members. Use 0 for all members.")
     greeting.add_argument("--mobile", action="append", help="Exact mobile target. Can be used multiple times.")
     greeting.add_argument("--mobiles", help="Comma separated exact mobile targets.")
@@ -588,6 +1020,22 @@ def build_parser() -> argparse.ArgumentParser:
     order_scan.add_argument("--order-page-size", type=int, default=10)
     order_scan.add_argument("--state-file", help="Notification state file.")
     order_scan.set_defaults(func=lambda args: normalize_limits(args, "member_limit", command_order_scan))
+
+    generate_copy = subparsers.add_parser("generate-copy", help="Generate one automation copy draft without sending.")
+    add_copywriter_flags(generate_copy)
+    generate_copy.set_defaults(copy_mode="agent")
+    generate_copy.add_argument(
+        "--task",
+        choices=["private-greeting", "live-reminder", "health-tip", "vegetable-push"],
+        required=True,
+    )
+    generate_copy.add_argument("--phase", choices=["pre", "final", "link"], default="pre")
+    generate_copy.add_argument("--sale-mode", choices=["auto", "sale", "non-sale"], default="auto")
+    generate_copy.add_argument("--weather-text", default="")
+    generate_copy.add_argument("--holiday-text", default="")
+    generate_copy.add_argument("--topic")
+    generate_copy.add_argument("--keyword", default="蔬菜")
+    generate_copy.set_defaults(func=command_generate_copy)
 
     return parser
 
