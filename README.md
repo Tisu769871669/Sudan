@@ -24,6 +24,43 @@
 - `scripts/sudan_daily_automation.py`：苏丹客服每日自动化脚本，默认 dry-run，显式 `--execute` 才真实发送。
 - `scripts/push-to-github.sh`：本地初始化 Git、提交并推送到 GitHub。
 
+## 每日自动化与 Agent 文案
+
+`scripts/sudan_daily_automation.py` 支持两种文案模式：
+
+- `--copy-mode template`：使用脚本内置保底模板，稳定、可预测，默认模式。
+- `--copy-mode agent`：在服务器上调用 OpenClaw agent 生成文案，脚本仍负责目标选择、禁词审核、dry-run/execute 和发送日志。
+
+适合交给 agent 生成的内容包括：
+
+- `private-greeting`：8:30 私发早安问候，可结合 `--weather-text`、`--holiday-text`。
+- `live-reminder`：直播提醒，可用 `--sale-mode non-sale` 表示非卖货直播，只走群提醒口径。
+- `health-tip`：14:00 养生小知识，可围绕 `--topic` 或直播预告生成 3 到 5 条要点。
+- `vegetable-push`：10:00 蔬菜群推送，可结合商品和季节养生建议生成更自然的群文案。
+
+只生成文案、不发送：
+
+```bash
+python3 scripts/sudan_daily_automation.py generate-copy \
+  --task live-reminder \
+  --phase link \
+  --sale-mode non-sale \
+  --copy-mode agent
+```
+
+真实发送仍必须显式加 `--execute`。例如非卖货直播只发群：
+
+```bash
+python3 scripts/sudan_daily_automation.py live-reminder \
+  --phase link \
+  --sale-mode non-sale \
+  --copy-mode agent \
+  --group-limit 0 \
+  --execute
+```
+
+大健康内容会做基础禁词审核，避免 `治愈`、`根治`、`保证有效`、`替代医生`、`包治`、`立刻见效` 等风险表达。Agent 失败或文案不合规时，脚本会回退到内置模板。
+
 ## 本地生成最终 prompt
 
 ```bash
