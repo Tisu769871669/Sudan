@@ -31,6 +31,8 @@
 - `--copy-mode template`：使用脚本内置保底模板，稳定、可预测，默认模式。
 - `--copy-mode agent`：在服务器上调用 OpenClaw agent 生成文案，脚本仍负责目标选择、禁词审核、dry-run/execute 和发送日志。
 
+默认文案 agent 是 OpenClaw 的 `main` agent。服务器如果要指定某个 worker 或专用 agent，可设置环境变量 `SUDAN_COPYWRITER_AGENT_ID`，或在命令里加 `--copywriter-agent-id`。
+
 适合交给 agent 生成的内容包括：
 
 - `private-greeting`：8:30 私发早安问候，可结合 `--weather-text`、`--holiday-text`。

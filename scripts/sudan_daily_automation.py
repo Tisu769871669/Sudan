@@ -26,7 +26,7 @@ STATE_DIR = ROOT_DIR / ".automation-state"
 DEFAULT_BASE_URL = "https://lx.metast.cn"
 DEFAULT_PAGE_SIZE = 20
 CHINA_TZ = ZoneInfo("Asia/Shanghai")
-DEFAULT_COPYWRITER_AGENT_ID = "sudan-main"
+DEFAULT_COPYWRITER_AGENT_ID = "main"
 DEFAULT_COPYWRITER_TIMEOUT_SECONDS = 90
 COPY_BLOCKED_TERMS = ["治愈", "根治", "保证有效", "替代医生", "包治", "立刻见效"]
 
