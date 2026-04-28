@@ -241,6 +241,32 @@ class HealthTopicPlannerTest(unittest.TestCase):
         self.assertEqual(topic, "八段锦入门")
         self.assertEqual(meta["source"], "manual")
 
+    def test_health_tip_topic_planner_does_not_invent_topic_without_context(self) -> None:
+        def runner(_prompt: str) -> str:
+            raise AssertionError("empty live context should not ask OpenClaw to invent a topic")
+
+        topic, meta = sudan_daily_automation.plan_health_tip_topic(
+            [],
+            copy_runner=runner,
+            copy_date=date(2026, 4, 28),
+        )
+
+        self.assertEqual(topic, "日常养生")
+        self.assertEqual(meta["source"], "fallback")
+
+    def test_health_tip_topic_planner_can_use_solar_term_without_live_context(self) -> None:
+        def runner(_prompt: str) -> str:
+            raise AssertionError("solar-term fallback should not need OpenClaw topic planning")
+
+        topic, meta = sudan_daily_automation.plan_health_tip_topic(
+            [],
+            copy_runner=runner,
+            copy_date=date(2026, 12, 21),
+        )
+
+        self.assertEqual(topic, "冬至时节养生")
+        self.assertEqual(meta["source"], "solar-term")
+
 
 if __name__ == "__main__":
     unittest.main()

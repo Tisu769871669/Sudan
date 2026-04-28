@@ -682,14 +682,18 @@ def build_health_tip_content(
     copy_runner: Any | None = None,
     agent_id: str | None = None,
     timeout_seconds: int | None = None,
+    copy_date: Any | None = None,
 ) -> tuple[str, dict[str, Any]]:
     fallback = build_health_tip_message(topic)
     if copy_mode != "agent":
         return fallback, {"fallbackUsed": False, "copyMode": "template", "sendChannel": "group"}
+    daily_context = build_daily_copy_context(live_previews=previews or [], now=copy_date)
     context = {
         "topic": topic,
-        "recentLivePreview": (previews or [])[:2],
-        "requirement": "围绕当日或昨日直播间核心内容，生成3到5条养生小知识，并带一个互动提问。",
+        "today": daily_context.today,
+        "solarTerm": daily_context.solar_term,
+        "recentLivePreview": daily_context.live_context,
+        "requirement": "围绕当日或昨日直播间核心内容，生成3到5条养生小知识，并带一个互动提问。如果没有直播上下文且 solarTerm 为空，不要编造节气。",
     }
     return generate_agent_copy(
         CopyRequest(task="health-tip", channel="group", fallback=fallback, context=context),
@@ -724,21 +728,40 @@ def plan_health_tip_topic(
     copy_runner: Any | None = None,
     agent_id: str | None = None,
     timeout_seconds: int | None = None,
+    copy_date: Any | None = None,
 ) -> tuple[str, dict[str, Any]]:
     if override:
         return override.strip(), {"source": "manual", "copyMode": "manual"}
 
     live_context = compact_live_context(previews)
     fallback = normalize_health_tip_topic(infer_health_tip_topic(previews))
+    copy_day = parse_copy_date(copy_date)
+    solar_term = solar_term_for_day(copy_day)
+    if not live_context:
+        if solar_term:
+            return f"{solar_term}时节养生", {
+                "source": "solar-term",
+                "copyMode": "template",
+                "solarTerm": solar_term,
+                "today": copy_day.isoformat(),
+            }
+        return fallback, {
+            "source": "fallback",
+            "copyMode": "template",
+            "solarTerm": "",
+            "today": copy_day.isoformat(),
+        }
     content, meta = generate_agent_copy(
         CopyRequest(
             task="health-topic-plan",
             channel="internal",
             fallback=fallback,
             context={
+                "today": copy_day.isoformat(),
+                "solarTerm": solar_term,
                 "recentLiveContext": live_context,
                 "examples": ["秋冬滋补避坑指南", "黄精熟地搭配滋补食材技巧", "八段锦入门小提醒"],
-                "requirement": "根据当日或昨日直播间核心内容，确定一个适合群发的养生小知识主题。只输出短主题，不要写完整文案。",
+                "requirement": "根据当日或昨日直播间核心内容，确定一个适合群发的养生小知识主题。只输出短主题，不要写完整文案；没有依据时不要编造节气。",
             },
             tone="运营策划，准确提炼直播核心内容",
         ),
@@ -750,6 +773,8 @@ def plan_health_tip_topic(
     meta["source"] = "agent" if not meta.get("fallbackUsed") else "fallback"
     meta["copyMode"] = "agent"
     meta["liveContextCount"] = len(live_context)
+    meta["solarTerm"] = solar_term
+    meta["today"] = copy_day.isoformat()
     return topic, meta
 
 
@@ -925,6 +950,7 @@ def command_health_tip(args: argparse.Namespace) -> None:
                 args.topic,
                 agent_id=args.copywriter_agent_id,
                 timeout_seconds=args.copywriter_timeout_seconds,
+                copy_date=args.date,
             )
         content, copy_meta = build_health_tip_content(
             topic,
@@ -932,6 +958,7 @@ def command_health_tip(args: argparse.Namespace) -> None:
             copy_mode=args.copy_mode,
             agent_id=args.copywriter_agent_id,
             timeout_seconds=args.copywriter_timeout_seconds,
+            copy_date=args.date,
         )
     targets = group_targets(client, args.group_limit, args.page_size)
     emit_plan(
@@ -989,6 +1016,7 @@ def command_generate_copy(args: argparse.Namespace) -> None:
                 args.topic,
                 agent_id=args.copywriter_agent_id,
                 timeout_seconds=args.copywriter_timeout_seconds,
+                copy_date=args.date,
             )
             if args.copy_mode == "agent"
             else (infer_health_tip_topic(previews, args.topic), {"source": "manual" if args.topic else "template"})
@@ -999,6 +1027,7 @@ def command_generate_copy(args: argparse.Namespace) -> None:
             copy_mode=args.copy_mode,
             agent_id=args.copywriter_agent_id,
             timeout_seconds=args.copywriter_timeout_seconds,
+            copy_date=args.date,
         )
         copy_meta["topicPlan"] = topic_plan
     elif args.task == "vegetable-push":
@@ -1196,6 +1225,7 @@ def build_parser() -> argparse.ArgumentParser:
     add_common_send_flags(health_tip)
     add_copywriter_flags(health_tip)
     health_tip.add_argument("--topic", help="Override the health tip topic.")
+    health_tip.add_argument("--date", help="Copy date in YYYY-MM-DD, defaults to today in China timezone.")
     health_tip.add_argument("--group-limit", type=int, default=3, help="Limit target groups. Use 0 for all groups.")
     health_tip.add_argument("--content", help="Override generated message content.")
     health_tip.set_defaults(func=lambda args: normalize_limits(args, "group_limit", command_health_tip))
