@@ -67,6 +67,9 @@ class ExplicitMemberTargetTest(unittest.TestCase):
 
 
 class AgentCopywriterTest(unittest.TestCase):
+    def test_default_copywriter_agent_is_primary_openclaw_agent(self) -> None:
+        self.assertEqual(sudan_daily_automation.DEFAULT_COPYWRITER_AGENT_ID, "main")
+
     def test_parse_agent_copy_extracts_json_from_markdown_fence(self) -> None:
         result = sudan_daily_automation.parse_agent_copy_output(
             '```json\n{"content":"每日养生不缺席 🌿","riskLevel":"low","sendChannel":"group"}\n```'
