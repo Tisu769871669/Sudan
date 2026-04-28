@@ -10,6 +10,7 @@ import shutil
 import subprocess
 import sys
 import time
+import uuid
 from dataclasses import dataclass, field
 from datetime import date, datetime
 from html import unescape
@@ -320,7 +321,7 @@ def run_copywriter_agent(prompt: str, *, agent_id: str | None = None, timeout_se
     resolved_agent_id = agent_id or os.environ.get("SUDAN_COPYWRITER_AGENT_ID") or DEFAULT_COPYWRITER_AGENT_ID
     resolved_timeout = int(timeout_seconds or os.environ.get("SUDAN_COPYWRITER_TIMEOUT_SECONDS") or DEFAULT_COPYWRITER_TIMEOUT_SECONDS)
     openclaw_bin = resolve_openclaw_bin(os.environ.get("SUDAN_COPYWRITER_OPENCLAW_BIN") or os.environ.get("OPENCLAW_BIN") or "openclaw")
-    session_id = f"sudan_copywriter_{datetime.now(CHINA_TZ).strftime('%Y%m%d')}"
+    session_id = f"sudan_copywriter_{datetime.now(CHINA_TZ).strftime('%Y%m%d%H%M%S')}_{uuid.uuid4().hex[:12]}"
     args = [
         openclaw_bin,
         "agent",
