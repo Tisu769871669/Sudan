@@ -10,8 +10,8 @@ import shutil
 import subprocess
 import sys
 import time
-from dataclasses import dataclass
-from datetime import datetime
+from dataclasses import dataclass, field
+from datetime import date, datetime
 from html import unescape
 from pathlib import Path
 from typing import Any
@@ -92,6 +92,79 @@ class CopyRequest:
     fallback: str
     context: dict[str, Any]
     tone: str = "贴心、自然、克制的养生顾问"
+
+
+@dataclass
+class DailyCopyContext:
+    today: str
+    weather_text: str = ""
+    solar_term: str = ""
+    holiday_text: str = ""
+    live_context: list[dict[str, Any]] = field(default_factory=list)
+    product_focus: list[str] = field(default_factory=list)
+
+
+SOLAR_TERMS_BY_MONTH_DAY = {
+    "02-03": "立春",
+    "02-04": "立春",
+    "02-18": "雨水",
+    "02-19": "雨水",
+    "03-05": "惊蛰",
+    "03-06": "惊蛰",
+    "03-20": "春分",
+    "03-21": "春分",
+    "04-04": "清明",
+    "04-05": "清明",
+    "04-19": "谷雨",
+    "04-20": "谷雨",
+    "05-05": "立夏",
+    "05-06": "立夏",
+    "05-20": "小满",
+    "05-21": "小满",
+    "06-05": "芒种",
+    "06-06": "芒种",
+    "06-21": "夏至",
+    "06-22": "夏至",
+    "07-06": "小暑",
+    "07-07": "小暑",
+    "07-22": "大暑",
+    "07-23": "大暑",
+    "08-07": "立秋",
+    "08-08": "立秋",
+    "08-22": "处暑",
+    "08-23": "处暑",
+    "09-07": "白露",
+    "09-08": "白露",
+    "09-22": "秋分",
+    "09-23": "秋分",
+    "10-08": "寒露",
+    "10-09": "寒露",
+    "10-23": "霜降",
+    "10-24": "霜降",
+    "11-07": "立冬",
+    "11-08": "立冬",
+    "11-22": "小雪",
+    "11-23": "小雪",
+    "12-06": "大雪",
+    "12-07": "大雪",
+    "12-21": "冬至",
+    "12-22": "冬至",
+    "01-05": "小寒",
+    "01-06": "小寒",
+    "01-20": "大寒",
+    "01-21": "大寒",
+}
+
+
+PRIVATE_GREETING_STYLE_REFERENCES = [
+    "每日养生不缺席 🌿",
+    "记得食用黄精怀熟地黄，温和滋养身心",
+    "贴上好视力眼贴，舒缓眼部疲劳",
+    "愿日子温柔，身心安康，事事顺心，日日皆欢喜",
+]
+
+
+PRIVATE_GREETING_PRODUCT_FOCUS = ["黄精怀熟地黄", "好视力眼贴"]
 
 
 def load_env_file(file_path: Path) -> None:
@@ -197,7 +270,7 @@ def build_copy_prompt(request: CopyRequest) -> str:
             "请根据任务上下文输出 JSON，禁止输出 Markdown、解释或多余文字。",
             "",
             "输出 JSON 格式：",
-            '{"content":"可直接发送的文案","riskLevel":"low","sendChannel":"group|private","reason":"一句话说明"}',
+            '{"content":"可直接发送的文案或内部规划结果","riskLevel":"low","sendChannel":"group|private|internal","reason":"一句话说明"}',
             "",
             "硬性规则：",
             "- 语气亲切自然，可以适度使用小表情，但不要刷屏。",
@@ -410,6 +483,43 @@ def strip_html(value: Any) -> str:
     return re.sub(r"\s+", " ", text).strip()
 
 
+def parse_copy_date(value: Any | None = None) -> date:
+    if isinstance(value, datetime):
+        return value.date()
+    if isinstance(value, date):
+        return value
+    text = str(value or "").strip()
+    if not text:
+        return datetime.now(CHINA_TZ).date()
+    return datetime.strptime(text, "%Y-%m-%d").date()
+
+
+def solar_term_for_day(day: date) -> str:
+    return SOLAR_TERMS_BY_MONTH_DAY.get(day.strftime("%m-%d"), "")
+
+
+def build_daily_copy_context(
+    *,
+    weather_text: str = "",
+    holiday_text: str = "",
+    live_previews: list[dict[str, Any]] | None = None,
+    now: Any | None = None,
+) -> DailyCopyContext:
+    today = parse_copy_date(now)
+    solar_term = solar_term_for_day(today)
+    holiday_parts = [str(holiday_text or "").strip()]
+    if solar_term and solar_term not in holiday_parts[0]:
+        holiday_parts.append(f"今日{solar_term}，适合顺着时节温和养护。")
+    return DailyCopyContext(
+        today=today.isoformat(),
+        weather_text=str(weather_text or "").strip(),
+        solar_term=solar_term,
+        holiday_text=" ".join(part for part in holiday_parts if part),
+        live_context=compact_live_context(live_previews or []),
+        product_focus=PRIVATE_GREETING_PRODUCT_FOCUS.copy(),
+    )
+
+
 def product_summary(item: dict[str, Any]) -> str:
     parts = [str(item.get("name") or "").replace("\n", " ").strip()]
     price = money(item.get("price"))
@@ -466,6 +576,22 @@ def format_open_time(value: Any) -> str:
     except (TypeError, ValueError):
         return ""
     return datetime.fromtimestamp(timestamp, CHINA_TZ).strftime("%m月%d日 %H:%M")
+
+
+def compact_live_context(previews: list[dict[str, Any]], limit: int = 2) -> list[dict[str, Any]]:
+    result: list[dict[str, Any]] = []
+    for preview in previews[:limit]:
+        row: dict[str, Any] = {}
+        for key in ("title", "name", "summary", "content"):
+            value = strip_html(preview.get(key))
+            if value:
+                row[key] = value[:120]
+        open_time = format_open_time(preview.get("openTime"))
+        if open_time:
+            row["openTimeText"] = open_time
+        if row:
+            result.append(row)
+    return result
 
 
 def build_live_message(previews: list[dict[str, Any]], phase: str, sale_mode: str = "auto") -> str:
@@ -583,17 +709,65 @@ def infer_health_tip_topic(previews: list[dict[str, Any]], override: str | None 
     return "日常养生"
 
 
+def normalize_health_tip_topic(value: str) -> str:
+    text = strip_html(value)
+    text = re.sub(r"^[#\-*\d.、\s]+", "", text)
+    first_line = text.splitlines()[0].strip() if text else ""
+    return first_line[:40] or "日常养生"
+
+
+def plan_health_tip_topic(
+    previews: list[dict[str, Any]],
+    override: str | None = None,
+    *,
+    copy_runner: Any | None = None,
+    agent_id: str | None = None,
+    timeout_seconds: int | None = None,
+) -> tuple[str, dict[str, Any]]:
+    if override:
+        return override.strip(), {"source": "manual", "copyMode": "manual"}
+
+    live_context = compact_live_context(previews)
+    fallback = normalize_health_tip_topic(infer_health_tip_topic(previews))
+    content, meta = generate_agent_copy(
+        CopyRequest(
+            task="health-topic-plan",
+            channel="internal",
+            fallback=fallback,
+            context={
+                "recentLiveContext": live_context,
+                "examples": ["秋冬滋补避坑指南", "黄精熟地搭配滋补食材技巧", "八段锦入门小提醒"],
+                "requirement": "根据当日或昨日直播间核心内容，确定一个适合群发的养生小知识主题。只输出短主题，不要写完整文案。",
+            },
+            tone="运营策划，准确提炼直播核心内容",
+        ),
+        runner=copy_runner,
+        agent_id=agent_id,
+        timeout_seconds=timeout_seconds,
+    )
+    topic = normalize_health_tip_topic(content)
+    meta["source"] = "agent" if not meta.get("fallbackUsed") else "fallback"
+    meta["copyMode"] = "agent"
+    meta["liveContextCount"] = len(live_context)
+    return topic, meta
+
+
 def build_private_greeting_content(args: argparse.Namespace, copy_runner: Any | None = None) -> tuple[str, dict[str, Any]]:
     if args.content:
         return args.content, {"copyMode": "manual", "sendChannel": "private"}
     if args.content_file:
         return Path(args.content_file).read_text(encoding="utf-8").strip(), {"copyMode": "manual-file", "sendChannel": "private"}
 
+    daily_context = build_daily_copy_context(
+        weather_text=getattr(args, "weather_text", "") or "",
+        holiday_text=getattr(args, "holiday_text", "") or "",
+        now=getattr(args, "date", None),
+    )
     fragments = ["早安～"]
-    if args.weather_text:
-        fragments.append(args.weather_text.strip())
-    if args.holiday_text:
-        fragments.append(args.holiday_text.strip())
+    if daily_context.weather_text:
+        fragments.append(daily_context.weather_text)
+    if daily_context.holiday_text:
+        fragments.append(daily_context.holiday_text)
     fragments.append("今天也记得照顾好自己。")
     fragments.append("黄精熟地按平时节奏坚持就好，有不舒服或疑问随时找我。")
     fallback = "".join(fragments)
@@ -605,9 +779,13 @@ def build_private_greeting_content(args: argparse.Namespace, copy_runner: Any | 
             channel="private",
             fallback=fallback,
             context={
-                "weatherText": getattr(args, "weather_text", "") or "",
-                "holidayText": getattr(args, "holiday_text", "") or "",
-                "requirement": "生成早安问候，结合天气/节气，轻轻提醒黄精熟地日常食养，不要过度推销。",
+                "today": daily_context.today,
+                "weatherText": daily_context.weather_text,
+                "solarTerm": daily_context.solar_term,
+                "holidayText": daily_context.holiday_text,
+                "productFocus": daily_context.product_focus,
+                "styleReferences": PRIVATE_GREETING_STYLE_REFERENCES,
+                "requirement": "生成早安问候或节气祝福，结合天气/节气，轻轻提醒黄精怀熟地黄和好视力眼贴等日常养护，不要过度推销。",
             },
         ),
         runner=copy_runner,
@@ -734,11 +912,19 @@ def command_health_tip(args: argparse.Namespace) -> None:
     payload = client.get("yugao-list")
     require_success(payload, "yugao-list")
     previews = records(payload)
+    topic_plan: dict[str, Any] = {"source": "manual" if args.topic else "template", "copyMode": "template"}
     topic = infer_health_tip_topic(previews, args.topic)
     if args.content:
         content = args.content
         copy_meta = {"copyMode": "manual", "sendChannel": "group"}
     else:
+        if args.copy_mode == "agent":
+            topic, topic_plan = plan_health_tip_topic(
+                previews,
+                args.topic,
+                agent_id=args.copywriter_agent_id,
+                timeout_seconds=args.copywriter_timeout_seconds,
+            )
         content, copy_meta = build_health_tip_content(
             topic,
             previews,
@@ -752,6 +938,7 @@ def command_health_tip(args: argparse.Namespace) -> None:
             "task": "health-tip",
             "mode": "execute" if args.execute else "dry-run",
             "topic": topic,
+            "topicPlan": topic_plan,
             "copy": copy_meta,
             "previewCount": len(previews),
             "targetCount": len(targets),
@@ -782,6 +969,7 @@ def command_generate_copy(args: argparse.Namespace) -> None:
             copy_mode=args.copy_mode,
             copywriter_agent_id=args.copywriter_agent_id,
             copywriter_timeout_seconds=args.copywriter_timeout_seconds,
+            date=args.date,
         )
         content, copy_meta = build_private_greeting_content(greeting_args)
     elif args.task == "live-reminder":
@@ -794,7 +982,16 @@ def command_generate_copy(args: argparse.Namespace) -> None:
             timeout_seconds=args.copywriter_timeout_seconds,
         )
     elif args.task == "health-tip":
-        topic = infer_health_tip_topic(previews, args.topic)
+        topic, topic_plan = (
+            plan_health_tip_topic(
+                previews,
+                args.topic,
+                agent_id=args.copywriter_agent_id,
+                timeout_seconds=args.copywriter_timeout_seconds,
+            )
+            if args.copy_mode == "agent"
+            else (infer_health_tip_topic(previews, args.topic), {"source": "manual" if args.topic else "template"})
+        )
         content, copy_meta = build_health_tip_content(
             topic,
             previews,
@@ -802,6 +999,7 @@ def command_generate_copy(args: argparse.Namespace) -> None:
             agent_id=args.copywriter_agent_id,
             timeout_seconds=args.copywriter_timeout_seconds,
         )
+        copy_meta["topicPlan"] = topic_plan
     elif args.task == "vegetable-push":
         content, copy_meta = build_vegetable_content(
             products,
@@ -1009,6 +1207,7 @@ def build_parser() -> argparse.ArgumentParser:
     greeting.add_argument("--mobiles", help="Comma separated exact mobile targets.")
     greeting.add_argument("--weather-text", help="Weather text from OpenClaw search or external source.")
     greeting.add_argument("--holiday-text", help="Holiday/solar-term text from OpenClaw search or external source.")
+    greeting.add_argument("--date", help="Copy date in YYYY-MM-DD, defaults to today in China timezone.")
     greeting.add_argument("--content", help="Exact message content.")
     greeting.add_argument("--content-file", help="Read exact message content from file.")
     greeting.set_defaults(func=lambda args: normalize_limits(args, "member_limit", command_private_greeting))
@@ -1033,6 +1232,7 @@ def build_parser() -> argparse.ArgumentParser:
     generate_copy.add_argument("--sale-mode", choices=["auto", "sale", "non-sale"], default="auto")
     generate_copy.add_argument("--weather-text", default="")
     generate_copy.add_argument("--holiday-text", default="")
+    generate_copy.add_argument("--date", help="Copy date in YYYY-MM-DD, defaults to today in China timezone.")
     generate_copy.add_argument("--topic")
     generate_copy.add_argument("--keyword", default="蔬菜")
     generate_copy.set_defaults(func=command_generate_copy)

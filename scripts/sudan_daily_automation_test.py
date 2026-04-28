@@ -5,6 +5,7 @@ import importlib.util
 import argparse
 import sys
 import unittest
+from datetime import date
 from pathlib import Path
 from typing import Any
 
@@ -140,6 +141,79 @@ class HealthTipTest(unittest.TestCase):
         self.assertIn("1.", content)
         self.assertIn("大家", content)
         self.assertIn("？", content)
+
+
+class DailyCopyContextTest(unittest.TestCase):
+    def test_daily_copy_context_adds_solar_term_when_date_matches(self) -> None:
+        context = sudan_daily_automation.build_daily_copy_context(
+            weather_text="今日阴，注意添衣。",
+            holiday_text="",
+            now=date(2026, 12, 21),
+        )
+
+        self.assertEqual(context.solar_term, "冬至")
+        self.assertIn("冬至", context.holiday_text)
+
+    def test_private_greeting_agent_context_includes_solar_term_and_reference_style(self) -> None:
+        args = argparse.Namespace(
+            content=None,
+            content_file=None,
+            weather_text="今日谷雨，雨生百谷。",
+            holiday_text="",
+            copy_mode="agent",
+            copywriter_agent_id=None,
+            copywriter_timeout_seconds=None,
+            date="2026-04-20",
+        )
+        seen: dict[str, str] = {}
+
+        def runner(prompt: str) -> str:
+            seen["prompt"] = prompt
+            return '{"content":"今日谷雨，记得温润养护 🌿","riskLevel":"low"}'
+
+        content, meta = sudan_daily_automation.build_private_greeting_content(args, copy_runner=runner)
+
+        self.assertIn("谷雨", content)
+        self.assertEqual(meta["fallbackUsed"], False)
+        self.assertIn("谷雨", seen["prompt"])
+        self.assertIn("每日养生不缺席", seen["prompt"])
+        self.assertIn("好视力眼贴", seen["prompt"])
+        self.assertIn("黄精怀熟地黄", seen["prompt"])
+
+
+class HealthTopicPlannerTest(unittest.TestCase):
+    def test_health_tip_topic_planner_uses_agent_with_live_context(self) -> None:
+        previews = [
+            {
+                "title": "今晚秋冬滋补专场",
+                "summary": "重点讲黄精熟地搭配滋补食材技巧",
+            }
+        ]
+        seen: dict[str, str] = {}
+
+        def runner(prompt: str) -> str:
+            seen["prompt"] = prompt
+            return '{"content":"秋冬滋补避坑指南","riskLevel":"low"}'
+
+        topic, meta = sudan_daily_automation.plan_health_tip_topic(previews, copy_runner=runner)
+
+        self.assertEqual(topic, "秋冬滋补避坑指南")
+        self.assertEqual(meta["source"], "agent")
+        self.assertIn("秋冬滋补", seen["prompt"])
+        self.assertIn("黄精熟地", seen["prompt"])
+
+    def test_health_tip_topic_planner_uses_manual_override(self) -> None:
+        def runner(_prompt: str) -> str:
+            raise AssertionError("manual topic should not call OpenClaw")
+
+        topic, meta = sudan_daily_automation.plan_health_tip_topic(
+            [{"title": "今晚秋冬滋补专场"}],
+            override="八段锦入门",
+            copy_runner=runner,
+        )
+
+        self.assertEqual(topic, "八段锦入门")
+        self.assertEqual(meta["source"], "manual")
 
 
 if __name__ == "__main__":
