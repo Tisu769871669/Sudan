@@ -37,7 +37,7 @@
 
 - `private-greeting`：8:30 私发早安问候，可结合 `--weather-text`、`--holiday-text` 和 `--date` 自动带入 24 节气上下文。
 - `live-reminder`：直播提醒，可用 `--sale-mode non-sale` 表示非卖货直播，只走群提醒口径。
-- `health-tip`：14:00 养生小知识，可围绕 `--topic` 或让 agent 从当日/昨日直播预告中先提炼主题，再生成 3 到 5 条要点。
+- `health-tip`：14:00 养生小知识，可围绕 `--topic` 或让 agent 从当日/昨日直播预告中先提炼主题，再生成 3 到 5 条要点；没有直播上下文时不会让 agent 编造节气主题。
 - `vegetable-push`：10:00 蔬菜群推送，可结合商品和季节养生建议生成更自然的群文案。
 
 只生成文案、不发送：
