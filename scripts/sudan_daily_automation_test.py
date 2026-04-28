@@ -71,6 +71,32 @@ class AgentCopywriterTest(unittest.TestCase):
     def test_default_copywriter_agent_is_primary_openclaw_agent(self) -> None:
         self.assertEqual(sudan_daily_automation.DEFAULT_COPYWRITER_AGENT_ID, "main")
 
+    def test_copywriter_agent_uses_fresh_session_for_each_request(self) -> None:
+        calls: list[list[str]] = []
+        original_run = sudan_daily_automation.subprocess.run
+        original_resolve = sudan_daily_automation.resolve_openclaw_bin
+
+        class Completed:
+            returncode = 0
+            stdout = '{"content":"早安","riskLevel":"low"}'
+            stderr = ""
+
+        def fake_run(args: list[str], **_kwargs: Any) -> Completed:
+            calls.append(args)
+            return Completed()
+
+        sudan_daily_automation.subprocess.run = fake_run
+        sudan_daily_automation.resolve_openclaw_bin = lambda _value: "openclaw"
+        try:
+            sudan_daily_automation.run_copywriter_agent("first", agent_id="main", timeout_seconds=1)
+            sudan_daily_automation.run_copywriter_agent("second", agent_id="main", timeout_seconds=1)
+        finally:
+            sudan_daily_automation.subprocess.run = original_run
+            sudan_daily_automation.resolve_openclaw_bin = original_resolve
+
+        session_ids = [args[args.index("--session-id") + 1] for args in calls]
+        self.assertNotEqual(session_ids[0], session_ids[1])
+
     def test_parse_agent_copy_extracts_json_from_markdown_fence(self) -> None:
         result = sudan_daily_automation.parse_agent_copy_output(
             '```json\n{"content":"每日养生不缺席 🌿","riskLevel":"low","sendChannel":"group"}\n```'
