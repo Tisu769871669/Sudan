@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import argparse
 import glob
+import hashlib
 import json
 import os
 import re
@@ -166,6 +167,38 @@ PRIVATE_GREETING_STYLE_REFERENCES = [
 
 
 PRIVATE_GREETING_PRODUCT_FOCUS = ["黄精怀熟地黄", "好视力眼贴"]
+
+
+PRIVATE_GREETING_VARIATIONS = {
+    "openingStyle": [
+        "轻快早安，像朋友提醒",
+        "温柔关心，少一点推销感",
+        "节气养生小叮嘱",
+        "简短暖心，适合私聊",
+        "自然日常，带一点小表情",
+    ],
+    "careFocus": [
+        "作息和精神状态",
+        "温水、饮食和肠胃舒服",
+        "用眼休息和好视力眼贴",
+        "黄精怀熟地黄日常坚持",
+        "天气变化和添减衣物",
+    ],
+    "closingStyle": [
+        "祝今天顺心",
+        "提醒有问题随时联系",
+        "祝身心安康",
+        "给一个轻松的互动问候",
+        "祝一天有好状态",
+    ],
+    "emojiStyle": [
+        "最多1个绿色植物表情",
+        "最多1个黄色爱心表情",
+        "最多1个微笑表情",
+        "不用表情，保持清爽",
+        "最多1个太阳或清晨感表情",
+    ],
+}
 
 
 def load_env_file(file_path: Path) -> None:
@@ -521,6 +554,20 @@ def build_daily_copy_context(
     )
 
 
+def pick_daily_private_greeting_variation(day_text: str) -> dict[str, Any]:
+    digest = hashlib.sha256(f"sudan-private-greeting:{day_text}".encode("utf-8")).digest()
+    result: dict[str, Any] = {"seed": day_text}
+    for index, (key, options) in enumerate(PRIVATE_GREETING_VARIATIONS.items()):
+        result[key] = options[digest[index] % len(options)]
+    result["mustAvoid"] = [
+        "不要复用前一天的完整句式",
+        "不要连续多天使用同一句开头",
+        "不要每天都写“今天也记得照顾好自己”",
+        "如果没有天气或节气，就用不同的日常养护角度切入",
+    ]
+    return result
+
+
 def product_summary(item: dict[str, Any]) -> str:
     parts = [str(item.get("name") or "").replace("\n", " ").strip()]
     price = money(item.get("price"))
@@ -799,6 +846,7 @@ def build_private_greeting_content(args: argparse.Namespace, copy_runner: Any | 
     fallback = "".join(fragments)
     if getattr(args, "copy_mode", "template") != "agent":
         return fallback, {"fallbackUsed": False, "copyMode": "template", "sendChannel": "private"}
+    daily_variation = pick_daily_private_greeting_variation(daily_context.today)
     return generate_agent_copy(
         CopyRequest(
             task="private-greeting",
@@ -811,7 +859,8 @@ def build_private_greeting_content(args: argparse.Namespace, copy_runner: Any | 
                 "holidayText": daily_context.holiday_text,
                 "productFocus": daily_context.product_focus,
                 "styleReferences": PRIVATE_GREETING_STYLE_REFERENCES,
-                "requirement": "生成早安问候或节气祝福，结合天气/节气，轻轻提醒黄精怀熟地黄和好视力眼贴等日常养护，不要过度推销。",
+                "dailyVariation": daily_variation,
+                "requirement": "生成早安问候或节气祝福，结合天气/节气，轻轻提醒黄精怀熟地黄和好视力眼贴等日常养护，不要过度推销。每天必须换一种表达，不要复用前一天的完整句式。",
             },
         ),
         runner=copy_runner,
@@ -1046,6 +1095,14 @@ def command_generate_copy(args: argparse.Namespace) -> None:
 def command_private_greeting(args: argparse.Namespace) -> None:
     client = create_client()
     content, copy_meta = build_private_greeting_content(args)
+    if (
+        args.execute
+        and getattr(args, "copy_mode", "template") == "agent"
+        and copy_meta.get("fallbackUsed")
+        and not getattr(args, "allow_fallback_send", False)
+    ):
+        reason = copy_meta.get("fallbackReason") or "agent copy generation failed"
+        raise RuntimeError(f"private-greeting agent fallback blocked; no message was sent: {reason}")
     targets = explicit_member_targets(args.mobile, args.mobiles) or member_targets(client, args.member_limit, args.page_size)
     emit_plan(
         {
@@ -1239,6 +1296,11 @@ def build_parser() -> argparse.ArgumentParser:
     greeting.add_argument("--weather-text", help="Weather text from OpenClaw search or external source.")
     greeting.add_argument("--holiday-text", help="Holiday/solar-term text from OpenClaw search or external source.")
     greeting.add_argument("--date", help="Copy date in YYYY-MM-DD, defaults to today in China timezone.")
+    greeting.add_argument(
+        "--allow-fallback-send",
+        action="store_true",
+        help="Allow sending the template fallback when agent copy generation fails.",
+    )
     greeting.add_argument("--content", help="Exact message content.")
     greeting.add_argument("--content-file", help="Read exact message content from file.")
     greeting.set_defaults(func=lambda args: normalize_limits(args, "member_limit", command_private_greeting))

@@ -206,6 +206,67 @@ class DailyCopyContextTest(unittest.TestCase):
         self.assertIn("好视力眼贴", seen["prompt"])
         self.assertIn("黄精怀熟地黄", seen["prompt"])
 
+    def test_private_greeting_agent_context_changes_by_date(self) -> None:
+        prompts: list[str] = []
+
+        def runner(prompt: str) -> str:
+            prompts.append(prompt)
+            return '{"content":"早安，今天换一种轻松问候 🌿","riskLevel":"low"}'
+
+        for copy_date in ("2026-04-28", "2026-04-29"):
+            args = argparse.Namespace(
+                content=None,
+                content_file=None,
+                weather_text="",
+                holiday_text="",
+                copy_mode="agent",
+                copywriter_agent_id=None,
+                copywriter_timeout_seconds=None,
+                date=copy_date,
+            )
+            sudan_daily_automation.build_private_greeting_content(args, copy_runner=runner)
+
+        self.assertNotEqual(prompts[0], prompts[1])
+        self.assertIn("dailyVariation", prompts[0])
+        self.assertIn("不要复用前一天", prompts[0])
+
+    def test_private_greeting_execute_does_not_send_template_when_agent_fails(self) -> None:
+        original_create_client = sudan_daily_automation.create_client
+        original_run = sudan_daily_automation.run_copywriter_agent
+        original_send_chat = sudan_daily_automation.send_chat
+        sent: list[str] = []
+
+        sudan_daily_automation.create_client = lambda: FakeClient({"code": 200, "data": []})
+        sudan_daily_automation.run_copywriter_agent = lambda *_args, **_kwargs: (_ for _ in ()).throw(
+            RuntimeError("agent unavailable")
+        )
+        sudan_daily_automation.send_chat = lambda _client, mobile, _content: sent.append(mobile) or {"code": 200}
+        args = argparse.Namespace(
+            content=None,
+            content_file=None,
+            weather_text="",
+            holiday_text="",
+            copy_mode="agent",
+            copywriter_agent_id=None,
+            copywriter_timeout_seconds=None,
+            date="2026-04-29",
+            mobile=["13002527669"],
+            mobiles=None,
+            member_limit=10,
+            page_size=20,
+            execute=True,
+            allow_fallback_send=False,
+        )
+        try:
+            with self.assertRaises(RuntimeError):
+                sudan_daily_automation.command_private_greeting(args)
+        finally:
+            sudan_daily_automation.create_client = original_create_client
+            sudan_daily_automation.run_copywriter_agent = original_run
+            sudan_daily_automation.send_chat = original_send_chat
+
+        self.assertEqual(sent, [])
+
 
 class HealthTopicPlannerTest(unittest.TestCase):
     def test_health_tip_topic_planner_uses_agent_with_live_context(self) -> None:
