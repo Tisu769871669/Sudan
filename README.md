@@ -35,7 +35,7 @@
 
 适合交给 agent 生成的内容包括：
 
-- `private-greeting`：8:30 私发早安问候，可结合 `--weather-text`、`--holiday-text` 和 `--date` 自动带入 24 节气上下文。
+- `private-greeting`：8:30 私发早安问候，可结合 `--weather-text`、`--holiday-text` 和 `--date` 自动带入 24 节气上下文；Agent 模式会按日期加入文案变体要求，避免每天复用同一句式。
 - `live-reminder`：直播提醒，可用 `--sale-mode non-sale` 表示非卖货直播，只走群提醒口径。
 - `health-tip`：14:00 养生小知识，可围绕 `--topic` 或让 agent 从当日/昨日直播预告中先提炼主题，再生成 3 到 5 条要点；没有直播上下文时不会让 agent 编造节气主题。
 - `vegetable-push`：10:00 蔬菜群推送，可结合商品和季节养生建议生成更自然的群文案。
@@ -72,6 +72,8 @@ python3 scripts/sudan_daily_automation.py live-reminder \
 ```
 
 大健康内容会做基础禁词审核，避免 `治愈`、`根治`、`保证有效`、`替代医生`、`包治`、`立刻见效` 等风险表达。Agent 失败或文案不合规时，脚本会回退到内置模板。
+
+`private-greeting --copy-mode agent --execute` 默认不会发送 Agent 失败后的模板兜底，避免客户连续收到固定早安文案。确实需要失败时也发送模板，可显式加 `--allow-fallback-send`。
 
 ## 本地生成最终 prompt
 
