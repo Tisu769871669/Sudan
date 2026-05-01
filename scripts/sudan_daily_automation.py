@@ -905,7 +905,15 @@ def send_group(client: ApiClient, group_id: str, content: str) -> dict[str, Any]
 
 
 def send_chat(client: ApiClient, mobile: str, content: str) -> dict[str, Any]:
-    return client.get("send-chat-message", {"mobile": mobile, "content": content})
+    return client.get(
+        "send-chat-message",
+        {
+            "mobile": mobile,
+            "sendId": mobile,
+            "recvId": mobile,
+            "content": content,
+        },
+    )
 
 
 def emit_plan(plan: dict[str, Any]) -> None:

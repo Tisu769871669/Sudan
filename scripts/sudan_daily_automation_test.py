@@ -66,6 +66,22 @@ class ExplicitMemberTargetTest(unittest.TestCase):
             ],
         )
 
+    def test_send_chat_includes_required_send_and_recv_ids(self) -> None:
+        client = FakeClient({"code": 200, "msg": "操作成功"})
+
+        sudan_daily_automation.send_chat(client, "13002527669", "早安")
+
+        self.assertEqual(client.action, "send-chat-message")
+        self.assertEqual(
+            client.params,
+            {
+                "mobile": "13002527669",
+                "sendId": "13002527669",
+                "recvId": "13002527669",
+                "content": "早安",
+            },
+        )
+
 
 class AgentCopywriterTest(unittest.TestCase):
     def test_default_copywriter_agent_is_primary_openclaw_agent(self) -> None:
