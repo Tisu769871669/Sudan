@@ -379,8 +379,13 @@ def run_copywriter_agent(prompt: str, *, agent_id: str | None = None, timeout_se
     ]
     if os.environ.get("SUDAN_COPYWRITER_FORCE_LOCAL") == "1" or os.environ.get("OPENCLAW_FORCE_LOCAL") == "1":
         args.append("--local")
+    path_parts = sorted(glob.glob("/root/.nvm/versions/node/*/bin"), reverse=True)
+    if os.environ.get("SUDAN_COPYWRITER_PATH_PREFIX"):
+        path_parts.insert(0, os.environ["SUDAN_COPYWRITER_PATH_PREFIX"])
+    path_parts.append(os.environ.get("PATH", ""))
     env = {
         **os.environ,
+        "PATH": os.pathsep.join(part for part in path_parts if part),
         "OPENCLAW_HIDE_BANNER": "1",
         "OPENCLAW_SUPPRESS_NOTES": "1",
         "NO_COLOR": "1",

@@ -97,6 +97,38 @@ class AgentCopywriterTest(unittest.TestCase):
         session_ids = [args[args.index("--session-id") + 1] for args in calls]
         self.assertNotEqual(session_ids[0], session_ids[1])
 
+    def test_copywriter_agent_adds_node_bin_to_path(self) -> None:
+        original_run = sudan_daily_automation.subprocess.run
+        original_resolve = sudan_daily_automation.resolve_openclaw_bin
+        original_glob = sudan_daily_automation.glob.glob
+        seen: dict[str, str] = {}
+
+        class Completed:
+            returncode = 0
+            stdout = '{"content":"早安","riskLevel":"low"}'
+            stderr = ""
+
+        def fake_run(_args: list[str], **kwargs: Any) -> Completed:
+            seen["PATH"] = kwargs["env"]["PATH"]
+            return Completed()
+
+        def fake_glob(pattern: str) -> list[str]:
+            if pattern == "/root/.nvm/versions/node/*/bin":
+                return ["/root/.nvm/versions/node/v22.22.2/bin"]
+            return []
+
+        sudan_daily_automation.subprocess.run = fake_run
+        sudan_daily_automation.resolve_openclaw_bin = lambda _value: "/root/.local/share/pnpm/openclaw"
+        sudan_daily_automation.glob.glob = fake_glob
+        try:
+            sudan_daily_automation.run_copywriter_agent("first", agent_id="main", timeout_seconds=1)
+        finally:
+            sudan_daily_automation.subprocess.run = original_run
+            sudan_daily_automation.resolve_openclaw_bin = original_resolve
+            sudan_daily_automation.glob.glob = original_glob
+
+        self.assertTrue(seen["PATH"].startswith("/root/.nvm/versions/node/v22.22.2/bin"))
+
     def test_parse_agent_copy_extracts_json_from_markdown_fence(self) -> None:
         result = sudan_daily_automation.parse_agent_copy_output(
             '```json\n{"content":"每日养生不缺席 🌿","riskLevel":"low","sendChannel":"group"}\n```'
