@@ -125,6 +125,49 @@ class AgentCopywriterTest(unittest.TestCase):
         self.assertEqual(content, "早安～今天也记得照顾好自己。")
         self.assertEqual(meta["fallbackUsed"], True)
 
+    def test_generate_copy_retries_transient_agent_failure(self) -> None:
+        request = sudan_daily_automation.CopyRequest(
+            task="private-greeting",
+            channel="private",
+            fallback="早安～今天也记得照顾好自己。",
+            context={"weatherText": ""},
+        )
+        calls = 0
+
+        def flaky_runner(_prompt: str) -> str:
+            nonlocal calls
+            calls += 1
+            if calls == 1:
+                raise RuntimeError("temporary gateway failure")
+            return '{"content":"早安，今天换个轻松问候。","riskLevel":"low","sendChannel":"private"}'
+
+        content, meta = sudan_daily_automation.generate_agent_copy(request, runner=flaky_runner, attempts=2)
+
+        self.assertEqual(content, "早安，今天换个轻松问候。")
+        self.assertEqual(meta["fallbackUsed"], False)
+        self.assertEqual(meta["attempts"], 2)
+
+    def test_resolve_openclaw_bin_finds_pnpm_global_candidate(self) -> None:
+        original_which = sudan_daily_automation.shutil.which
+        original_glob = sudan_daily_automation.glob.glob
+        original_exists = sudan_daily_automation.Path.exists
+
+        def fake_exists(path: Path) -> bool:
+            normalized = str(path).replace("\\", "/")
+            return normalized.endswith("/root/.local/share/pnpm/openclaw")
+
+        sudan_daily_automation.shutil.which = lambda _value: None
+        sudan_daily_automation.glob.glob = lambda _pattern: []
+        sudan_daily_automation.Path.exists = fake_exists
+        try:
+            resolved = sudan_daily_automation.resolve_openclaw_bin("openclaw")
+        finally:
+            sudan_daily_automation.shutil.which = original_which
+            sudan_daily_automation.glob.glob = original_glob
+            sudan_daily_automation.Path.exists = original_exists
+
+        self.assertEqual(resolved, "/root/.local/share/pnpm/openclaw")
+
 
 class CopyModeIntegrationTest(unittest.TestCase):
     def test_private_greeting_agent_copy_uses_weather_and_holiday_context(self) -> None:

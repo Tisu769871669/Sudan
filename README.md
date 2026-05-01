@@ -33,6 +33,8 @@
 
 默认文案 agent 是 OpenClaw 的 `main` agent。服务器如果要指定某个 worker 或专用 agent，可设置环境变量 `SUDAN_COPYWRITER_AGENT_ID`，或在命令里加 `--copywriter-agent-id`。
 
+Agent 文案生成默认会重试 3 次，可通过 `SUDAN_COPYWRITER_ATTEMPTS` 或 `--copywriter-attempts` 调整。脚本会优先使用 `OPENCLAW_BIN` / `SUDAN_COPYWRITER_OPENCLAW_BIN`，未配置时会尝试定位服务器上的 pnpm 全局 `openclaw`。
+
 适合交给 agent 生成的内容包括：
 
 - `private-greeting`：8:30 私发早安问候，可结合 `--weather-text`、`--holiday-text` 和 `--date` 自动带入 24 节气上下文；Agent 模式会按日期加入文案变体要求，避免每天复用同一句式。
@@ -73,7 +75,7 @@ python3 scripts/sudan_daily_automation.py live-reminder \
 
 大健康内容会做基础禁词审核，避免 `治愈`、`根治`、`保证有效`、`替代医生`、`包治`、`立刻见效` 等风险表达。Agent 失败或文案不合规时，脚本会回退到内置模板。
 
-`private-greeting --copy-mode agent --execute` 默认不会发送 Agent 失败后的模板兜底，避免客户连续收到固定早安文案。确实需要失败时也发送模板，可显式加 `--allow-fallback-send`。
+`private-greeting --copy-mode agent --execute` 默认不会发送 Agent 多次失败后的模板兜底，避免客户连续收到固定早安文案。确实需要失败时也发送模板，可显式加 `--allow-fallback-send`。
 
 ## 本地生成最终 prompt
 

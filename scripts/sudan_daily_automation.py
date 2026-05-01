@@ -30,6 +30,7 @@ DEFAULT_PAGE_SIZE = 20
 CHINA_TZ = ZoneInfo("Asia/Shanghai")
 DEFAULT_COPYWRITER_AGENT_ID = "main"
 DEFAULT_COPYWRITER_TIMEOUT_SECONDS = 90
+DEFAULT_COPYWRITER_ATTEMPTS = 3
 COPY_BLOCKED_TERMS = ["治愈", "根治", "保证有效", "替代医生", "包治", "立刻见效"]
 
 
@@ -328,27 +329,36 @@ def generate_agent_copy(
     runner: Any | None = None,
     agent_id: str | None = None,
     timeout_seconds: int | None = None,
+    attempts: int | None = None,
 ) -> tuple[str, dict[str, Any]]:
-    try:
-        prompt = build_copy_prompt(request)
-        raw = runner(prompt) if runner else run_copywriter_agent(prompt, agent_id=agent_id, timeout_seconds=timeout_seconds)
-        payload = parse_agent_copy_output(raw)
-        content = str(payload.get("content") or "").strip()
-        validate_generated_copy(content)
-        send_channel = str(payload.get("sendChannel") or request.channel).strip() or request.channel
-        return content, {
-            "fallbackUsed": False,
-            "riskLevel": str(payload.get("riskLevel") or ""),
-            "sendChannel": send_channel,
-            "reason": str(payload.get("reason") or ""),
-        }
-    except Exception as error:
-        return request.fallback, {
-            "fallbackUsed": True,
-            "fallbackReason": str(error)[:240],
-            "sendChannel": request.channel,
-        }
-
+    max_attempts = max(1, int(attempts or os.environ.get("SUDAN_COPYWRITER_ATTEMPTS") or DEFAULT_COPYWRITER_ATTEMPTS))
+    last_error: Exception | None = None
+    prompt = build_copy_prompt(request)
+    for attempt in range(1, max_attempts + 1):
+        try:
+            raw = runner(prompt) if runner else run_copywriter_agent(prompt, agent_id=agent_id, timeout_seconds=timeout_seconds)
+            payload = parse_agent_copy_output(raw)
+            content = str(payload.get("content") or "").strip()
+            validate_generated_copy(content)
+            send_channel = str(payload.get("sendChannel") or request.channel).strip() or request.channel
+            return content, {
+                "fallbackUsed": False,
+                "attempts": attempt,
+                "riskLevel": str(payload.get("riskLevel") or ""),
+                "sendChannel": send_channel,
+                "reason": str(payload.get("reason") or ""),
+            }
+        except Exception as error:
+            last_error = error
+            if attempt < max_attempts:
+                time.sleep(min(2, attempt))
+    error_text = str(last_error or "unknown agent error")
+    return request.fallback, {
+        "fallbackUsed": True,
+        "attempts": max_attempts,
+        "fallbackReason": error_text[:240],
+        "sendChannel": request.channel,
+    }
 
 def run_copywriter_agent(prompt: str, *, agent_id: str | None = None, timeout_seconds: int | None = None) -> str:
     resolved_agent_id = agent_id or os.environ.get("SUDAN_COPYWRITER_AGENT_ID") or DEFAULT_COPYWRITER_AGENT_ID
@@ -399,6 +409,9 @@ def resolve_openclaw_bin(value: str) -> str:
     found = shutil.which(value)
     if found:
         return found
+    pnpm_global = Path("/root/.local/share/pnpm/openclaw")
+    if pnpm_global.exists():
+        return pnpm_global.as_posix()
     candidates = sorted(glob.glob("/root/.nvm/versions/node/*/bin/openclaw"), reverse=True)
     return candidates[0] if candidates else value
 
@@ -602,6 +615,7 @@ def build_vegetable_content(
     copy_runner: Any | None = None,
     agent_id: str | None = None,
     timeout_seconds: int | None = None,
+    attempts: int | None = None,
 ) -> tuple[str, dict[str, Any]]:
     fallback = build_vegetable_message(products)
     if copy_mode != "agent":
@@ -682,6 +696,7 @@ def build_live_reminder_content(
     copy_runner: Any | None = None,
     agent_id: str | None = None,
     timeout_seconds: int | None = None,
+    attempts: int | None = None,
 ) -> tuple[str, dict[str, Any]]:
     fallback = build_live_message(previews, phase, sale_mode)
     if copy_mode != "agent":
@@ -699,6 +714,7 @@ def build_live_reminder_content(
         runner=copy_runner,
         agent_id=agent_id,
         timeout_seconds=timeout_seconds,
+        attempts=attempts,
     )
     meta["sendChannel"] = "group"
     return content, meta
@@ -729,6 +745,7 @@ def build_health_tip_content(
     copy_runner: Any | None = None,
     agent_id: str | None = None,
     timeout_seconds: int | None = None,
+    attempts: int | None = None,
     copy_date: Any | None = None,
 ) -> tuple[str, dict[str, Any]]:
     fallback = build_health_tip_message(topic)
@@ -747,6 +764,7 @@ def build_health_tip_content(
         runner=copy_runner,
         agent_id=agent_id,
         timeout_seconds=timeout_seconds,
+        attempts=attempts,
     )
 
 
@@ -775,6 +793,7 @@ def plan_health_tip_topic(
     copy_runner: Any | None = None,
     agent_id: str | None = None,
     timeout_seconds: int | None = None,
+    attempts: int | None = None,
     copy_date: Any | None = None,
 ) -> tuple[str, dict[str, Any]]:
     if override:
@@ -815,6 +834,7 @@ def plan_health_tip_topic(
         runner=copy_runner,
         agent_id=agent_id,
         timeout_seconds=timeout_seconds,
+        attempts=attempts,
     )
     topic = normalize_health_tip_topic(content)
     meta["source"] = "agent" if not meta.get("fallbackUsed") else "fallback"
@@ -866,6 +886,7 @@ def build_private_greeting_content(args: argparse.Namespace, copy_runner: Any | 
         runner=copy_runner,
         agent_id=getattr(args, "copywriter_agent_id", None),
         timeout_seconds=getattr(args, "copywriter_timeout_seconds", None),
+        attempts=getattr(args, "copywriter_attempts", None),
     )
 
 
@@ -1250,6 +1271,12 @@ def add_copywriter_flags(parser: argparse.ArgumentParser) -> None:
         "--copywriter-timeout-seconds",
         type=int,
         default=int(os.environ.get("SUDAN_COPYWRITER_TIMEOUT_SECONDS", DEFAULT_COPYWRITER_TIMEOUT_SECONDS)),
+    )
+    parser.add_argument(
+        "--copywriter-attempts",
+        type=int,
+        default=int(os.environ.get("SUDAN_COPYWRITER_ATTEMPTS", DEFAULT_COPYWRITER_ATTEMPTS)),
+        help="Retry count for OpenClaw copy generation before falling back.",
     )
 
 
